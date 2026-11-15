@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  check:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['22.19.0', '24']
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Check JavaScript and plugin boundaries
+        run: node scripts/check.mjs
+      - name: Build plugin
+        run: node scripts/build.mjs
+      - name: Run isolated tests
+        run: node --test test/*.test.mjs
+
+  package:
+    name: Verify plugin package
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Build plugin
+        run: node scripts/build.mjs
+      - name: Test archive validation
+        run: python -m unittest discover -s test -p 'test_*.py'
+      - name: Build and pack
+        run: python scripts/pack.py --output-dir release-artifacts
+      - name: Validate archive and version tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == tag ]]; then
+            python scripts/verify-package.py release-artifacts --tag "$TAG_NAME"
+          else
+            python scripts/verify-package.py release-artifacts
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: plugin-package
+          path: |
+            release-artifacts/*.tgz
+            release-artifacts/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  publish:
+    name: Publish npm package
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: plugin-package
+          path: release-artifacts
+      - name: Tag must match package version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const { version, name } = JSON.parse(readFileSync('package.json', 'utf8'));
+          if (process.env.TAG_NAME !== `v${version}`) {
+            throw new Error(`tag ${process.env.TAG_NAME} does not match ${name}@${version}`);
+          }
+          console.log(`verified ${name}@${version}`);
+          NODE
+      - name: Check whether the version is already published
+        id: version-check
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          status=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/${name}/${version}")
+          if [ "$status" = "200" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "${name}@${version} is already published; skipping publish"
+          elif [ "$status" = "404" ]; then
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::registry pre-check returned HTTP $status"; exit 1
+          fi
+      - name: Publish to npm with trusted publishing
+        if: steps.version-check.outputs.already == 'false'
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          channel=$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest'")
+          npm publish "./release-artifacts/${name}-${version}.tgz" --access public --tag "$channel" --provenance --ignore-scripts --registry=https://registry.npmjs.org/
+      - name: Verify published version
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          for i in $(seq 1 24); do
+            status=$(curl -sS -o /tmp/published.json -w '%{http_code}' "https://registry.npmjs.org/${name}/${version}")
+            if [ "$status" = "200" ]; then
+              node -e "const p=require('/tmp/published.json'); if(p.name!==process.argv[1]||p.version!==process.argv[2]) process.exit(1); console.log('verified '+p.name+'@'+p.version)" "$name" "$version"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::${name}@${version} not visible on the registry after waiting"; exit 1
+
+  release:
+    name: Publish tagged GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: [package, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: plugin-package
+          path: release-artifacts
+      - name: Publish verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          flags=()
+          if [[ "$TAG_NAME" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG_NAME" release-artifacts/*.tgz release-artifacts/*.sha256 \
+            --repo "$GH_REPO" --verify-tag --title "dsh-devin-provider $TAG_NAME" --generate-notes \
+            --notes 'Devin 订阅接入：浏览器 PKCE / CLI / API Key 登录、额度与重置倒计时、模型家族折叠与逐模型覆盖、提示词缓存保活。使用条件与验证范围见仓库文档。' \
+            "${flags[@]}"

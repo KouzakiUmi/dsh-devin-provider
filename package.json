@@ -1,0 +1,81 @@
+{
+  "name": "dsh-devin-provider",
+  "displayName": "Devin Provider",
+  "version": "0.1.1",
+  "description": "DeepSeek Harness Devin Provider: Browser PKCE / CLI / API Key auth, model catalog & per-model overrides, quota dashboard, and 5-minute prompt cache keepalive.",
+  "author": "KouzakiUmi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KouzakiUmi/dsh-devin-provider.git"
+  },
+  "homepage": "https://github.com/KouzakiUmi/dsh-devin-provider#readme",
+  "bugs": {
+    "url": "https://github.com/KouzakiUmi/dsh-devin-provider/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "devin",
+    "windsurf",
+    "oauth",
+    "provider"
+  ],
+  "type": "module",
+  "main": "./lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node --test test/*.test.mjs",
+    "check": "node scripts/check.mjs && node scripts/build.mjs && node --test test/*.test.mjs"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.4 <0.3.0 || >=0.2.2-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-llm-pi-ai": ">=0.2.1-rc.4 <0.3.0 || >=0.2.2-rc.1 <0.3.0",
+    "@earendil-works/pi-ai": ">=1.1.0 <2.0.0",
+    "@deepseek-ai/dsh-credentials": ">=0.2.1-rc.4 <0.3.0 || >=0.2.2-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-launch-environment": ">=0.2.1-rc.4 <0.3.0 || >=0.2.2-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-rc.4 <0.3.0 || >=0.2.2-rc.1 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  }
+}

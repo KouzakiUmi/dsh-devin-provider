@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Devin Provider",
+    "description": "在 DeepSeek Harness 中接入 Devin 订阅（浏览器 PKCE 登录、读取本机 devin CLI 登录、API Key 或凭据引用）。前往「设置 → Devin Provider」可管理多账号、查看每日/每周/ACU 额度与重置倒计时、同步账号模型目录、调整逐模型开关与参数，并配置 5 分钟提示词缓存保活。"
+  }
+}

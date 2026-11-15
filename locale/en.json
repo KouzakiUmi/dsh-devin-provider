@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Devin Provider",
+    "description": "Connect Devin subscriptions (Browser PKCE, devin CLI sign-in, API key, or credential reference) in DeepSeek Harness. Open Settings → Devin Provider to manage accounts, inspect daily/weekly/ACU quotas with reset countdowns, sync model catalogs, tune per-model parameters, and configure 5-minute prompt cache keepalive."
+  }
+}
