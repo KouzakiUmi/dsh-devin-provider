@@ -152,15 +152,15 @@ export class DevinController {
       } catch {}
     }
     if (who === null) throw new Error('Devin 拒绝了该凭据：未处于已登录状态');
-    if (who) return normalizeIdentity(who);
+    if (who) return { identity: normalizeIdentity(who), verified: true };
     const fallback = unknownAccountName(key, server);
-    return { email: fallback, name: fallback };
+    return { identity: { email: fallback, name: fallback }, verified: false };
   }
 
   async bindOAuthLogin({ accountId, key, server, signal }) {
     if (signal?.aborted || this.disposed) throw new Error('登录已取消');
     const owner = this.owner(accountId);
-    const identity = await this.resolveIdentity(key, server);
+    const { identity, verified } = await this.resolveIdentity(key, server);
     if (signal?.aborted || this.disposed) throw new Error('登录已取消');
     await this.writeGrant(accountId, { key, server, updatedAt: new Date().toISOString() });
     let catalog;
@@ -175,6 +175,7 @@ export class DevinController {
         authMode: 'oauth',
         label: identity.email || owner.label,
         identity,
+        identityVerified: verified,
         loggedAt: new Date().toISOString(),
         credentialStored: true
       });
@@ -360,7 +361,7 @@ export class DevinController {
       });
       if (!cliCred?.key) throw new Error('本机 devin CLI credentials.toml 中没有 windsurf_api_key');
       const server = this.serverFor({ server: cliCred.server });
-      const identity = await this.resolveIdentity(cliCred.key, server);
+      const { identity, verified } = await this.resolveIdentity(cliCred.key, server);
       let catalog;
       try {
         catalog = await fetchCliModelConfigs(cliCred.key, server, this.fetchImpl, this.life.signal);
@@ -373,6 +374,7 @@ export class DevinController {
           authMode: 'cli',
           server: cliCred.server !== DEFAULT_SERVER ? cliCred.server : '',
           identity,
+          identityVerified: verified,
           loggedAt: new Date().toISOString()
         });
         const idx = next.accounts.findIndex((a) => a.id === targetId);
@@ -396,13 +398,16 @@ export class DevinController {
       assertAccountId(input.id);
       const plaintextKey = typeof request.apiKey === 'string' ? request.apiKey.trim() : '';
       let identity = input.identity;
+      let identityVerified = this.store.current?.accounts?.find((a) => a.id === input.id)?.identityVerified;
       const candidateServer = this.serverFor({ server: normalizeServerUrl(input.server) });
       if (input.authMode === 'api-key') {
         if (!plaintextKey) {
           const existing = await this.readGrant(input.id).catch(() => undefined);
           if (!existing?.key) throw new Error('请输入 Devin API Key（cog_…）或 Session Token');
         } else {
-          identity = await this.resolveIdentity(plaintextKey, candidateServer);
+          const resolved = await this.resolveIdentity(plaintextKey, candidateServer);
+          identity = resolved.identity;
+          identityVerified = resolved.verified;
           await this.writeGrant(input.id, { key: plaintextKey, server: candidateServer, updatedAt: new Date().toISOString() });
         }
       }
@@ -410,6 +415,7 @@ export class DevinController {
         const entry = account({
           ...input,
           ...(identity ? { identity } : {}),
+          ...(typeof identityVerified === 'boolean' ? { identityVerified } : {}),
           ...(input.authMode === 'api-key' ? { credentialStored: true, loggedAt: new Date().toISOString() } : {})
         });
         const idx = next.accounts.findIndex((a) => a.id === entry.id);

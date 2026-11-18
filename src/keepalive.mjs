@@ -126,7 +126,7 @@ export async function pingOnce(server, key, body, signal, fetchImpl = fetch) {
       }
     }
   } catch (e) {
-    return { status: 0, error: String(e?.message || e || 'the reply broke off') };
+    return { status: 0, error: String(e?.message || e || '回复中断') };
   }
   return { status: 200, tokens };
 }

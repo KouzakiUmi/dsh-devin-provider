@@ -635,7 +635,7 @@ export async function* events(it, uid = '', offeredToolNames = null) {
     try {
       r = await it.next();
     } catch (e) {
-      yield { error: { status: 502, message: 'the reply broke off: ' + (e?.message || String(e)) } };
+      yield { error: { status: 502, message: '回复中断：' + (e?.message || String(e)) } };
       return;
     }
     if (r.done) break;
@@ -694,7 +694,7 @@ export async function* events(it, uid = '', offeredToolNames = null) {
   }
   yield* emitFiltered(harmony.flush());
   if (!said && tools < 0) {
-    yield { error: { status: 502, message: 'an empty reply (Devin returned no text, reasoning or tool call)' } };
+    yield { error: { status: 502, message: '空回复（Devin 未返回文本、思考或工具调用）' } };
     return;
   }
   if (own.signature && isGemini(uid) && (own.type || 'gemini') === 'gemini') {
@@ -728,7 +728,7 @@ function parseArgsWithError(raw) {
   try {
     const parsed = JSON.parse(raw || '{}');
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { arguments: parsed };
-    return { arguments: {}, argumentsError: 'Tool call arguments did not parse to a JSON object' };
+    return { arguments: {}, argumentsError: '工具调用参数不是有效的 JSON 对象' };
   } catch (err) {
     return { arguments: {}, argumentsError: err instanceof Error ? err.message : 'Invalid tool call JSON arguments' };
   }
@@ -784,7 +784,7 @@ export function streamDevinChat({
       const cred = await resolveCredential();
       const key = cred?.key;
       const server = cred?.server;
-      if (!key) return failStream(401, "Devin isn't signed in");
+      if (!key) return failStream(401, 'Devin 尚未登录');
 
       const ka = keepaliveSettings(keepaliveConfig);
       const kaId = ka.enabled ? keepaliveKey(context, options) : '';
@@ -819,17 +819,17 @@ export function streamDevinChat({
       try {
         first = await fr.next();
       } catch (e) {
-        return failStream(502, 'the reply broke off: ' + (e?.message || String(e)));
+        return failStream(502, '回复中断：' + (e?.message || String(e)));
       }
-      if (first.done) return failStream(502, 'the reply broke off: EOF');
+      if (first.done) return failStream(502, '回复中断：连接提前结束');
       if (first.value.end) {
         const err = failure(200, dec.decode(first.value.data));
-        return failStream(err.status < 300 ? 502 : err.status, err.status < 300 ? 'an empty reply' : err.message);
+        return failStream(err.status < 300 ? 502 : err.status, err.status < 300 ? '空回复' : err.message);
       }
 
       const source = eventsWithCleanup(prepend(first.value, fr), uid, offeredToolNames);
       const head = await source.next();
-      if (head.done) return failStream(502, 'an empty reply');
+      if (head.done) return failStream(502, '空回复');
       if (head.value.error) {
         await fr.return?.().catch(() => {});
         return failStream(head.value.error.status, head.value.error.message);

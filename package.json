@@ -1,7 +1,7 @@
 {
   "name": "dsh-devin-provider",
   "displayName": "Devin Provider",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "DeepSeek Harness Devin Provider: Browser PKCE / CLI / API Key auth, model catalog & per-model overrides, quota dashboard, and 5-minute prompt cache keepalive.",
   "author": "KouzakiUmi",
   "repository": {
@@ -37,7 +37,8 @@
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "license": "MIT",
   "publishConfig": {
@@ -45,12 +46,13 @@
     "registry": "https://registry.npmjs.org/"
   },
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=22.19.0",
+    "dsh": ">=0.2.1-rc.4 <0.3.0 || >=0.2.2-rc.1 <0.3.0"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node scripts/build.mjs && node --test test/*.test.mjs",
-    "check": "node scripts/check.mjs && node scripts/build.mjs && node --test test/*.test.mjs"
+    "check": "node scripts/build.mjs && node scripts/check.mjs && node --test test/*.test.mjs"
   },
   "dependencies": {},
   "peerDependencies": {

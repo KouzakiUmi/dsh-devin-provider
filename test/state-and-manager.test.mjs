@@ -7,6 +7,8 @@ import { StateStore, initialState, revision } from '../src/state.mjs';
 import { DevinController } from '../src/manager.mjs';
 import { DevinOAuth } from '../src/oauth.mjs';
 import { parseUsageResponse } from '../src/quota.mjs';
+import { readCliCredentials } from '../src/cli.mjs';
+import { DEFAULT_SERVER } from '../src/pb.mjs';
 
 test('StateStore enforces revision check, atomic write, and keeps secrets out of state.json', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'devin-state-'));
@@ -190,4 +192,77 @@ test('DevinOAuth PKCE roundtrip exchanges callback code and settles cleanly', as
   assert.equal(oauth.status().state, 'success');
   assert.equal(bound.key, 'devin-session-token$pkce');
   oauth.dispose();
+});
+
+test('saveAccount rejects unsafe account ids and server URLs', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'devin-guard-'));
+  try {
+    const grants = new Map();
+    const controller = new DevinController({
+      statePath: join(dir, 'state.json'),
+      fetchImpl: async () => new Response('not found', { status: 404 }),
+      readGrant: async (id) => grants.get(id),
+      writeGrant: async (id, val) => { grants.set(id, val); },
+      deleteGrant: async (id) => { grants.delete(id); }
+    });
+    await controller.store.load();
+    await assert.rejects(
+      () => controller.invoke({
+        op: 'saveAccount',
+        revision: revision(controller.store.current),
+        account: { id: '../evil', label: 'Bad', authMode: 'api-key' },
+        apiKey: 'cog_x'
+      }),
+      /账号 ID/
+    );
+    await assert.rejects(
+      () => controller.invoke({
+        op: 'saveAccount',
+        revision: revision(controller.store.current),
+        account: { id: 'ok', label: 'Ok', authMode: 'api-key', server: 'javascript:alert(1)' },
+        apiKey: 'cog_x'
+      }),
+      /服务地址/
+    );
+    controller.dispose();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('saveAccount records unverified identity when online check fails', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'devin-verify-'));
+  try {
+    const controller = new DevinController({
+      statePath: join(dir, 'state.json'),
+      fetchImpl: async () => { throw new Error('network down'); },
+      readGrant: async () => undefined,
+      writeGrant: async () => {},
+      deleteGrant: async () => {}
+    });
+    await controller.store.load();
+    const snap = await controller.invoke({
+      op: 'saveAccount',
+      revision: revision(controller.store.current),
+      account: { id: 'offline', label: 'Offline', authMode: 'api-key' },
+      apiKey: 'cog_offline'
+    });
+    assert.equal(snap.accounts[0].identityVerified, false);
+    controller.dispose();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('readCliCredentials falls back to the default server for an unsafe api_server_url', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'devin-cli-'));
+  try {
+    const file = join(dir, 'credentials.toml');
+    await writeFile(file, 'windsurf_api_key = "cog_cli"\napi_server_url = "javascript:alert(1)"\n', 'utf8');
+    const cred = await readCliCredentials(file);
+    assert.equal(cred.key, 'cog_cli');
+    assert.equal(cred.server, DEFAULT_SERVER);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

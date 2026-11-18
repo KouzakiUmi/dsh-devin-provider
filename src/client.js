@@ -702,7 +702,9 @@ function ModelRow({ model, disabled, editor, draftError, fieldErrors, onToggle, 
         }),
         h('span', { className: 'ddp-model-name', title: model?.id }, model?.name || model?.id)),
       h('div', { className: 'ddp-chip-row' },
-        model?.free ? h(ModelTag, { tone: 'success' }, '免费 · 不计额度') : null,
+        model?.free
+          ? h(ModelTag, { tone: 'success' }, '免费 · 不计额度')
+          : model?.mixedFree ? h(ModelTag, null, '部分变体免费') : null,
         !enabled ? h(ModelTag, { tone: 'warn' }, '已停用') : null)),
     h('div', { className: 'ddp-model-tags' },
       h(ModelTag, { tone: values.imageInput ? 'accent' : 'muted' }, values.imageInput ? '视觉' : '纯文本'),
@@ -711,7 +713,9 @@ function ModelRow({ model, disabled, editor, draftError, fieldErrors, onToggle, 
       h(ModelTag, null, `输出 ${formatTokenCount(values.maxTokens)}`),
       values.defaultReasoning ? h(ModelTag, { tone: 'accent' }, `默认 ${values.defaultReasoning}`) : null,
       values.toolsEnabled === false ? h(ModelTag, { tone: 'warn' }, '工具已停用') : null,
-      model?.cost ? h(ModelTag, null, `$${model.cost.input}/$${model.cost.output} per 1M`) : null),
+      model?.cost
+        ? h(ModelTag, null, `$${model.cost.input}/$${model.cost.output} per 1M`)
+        : model?.mixedCost ? h(ModelTag, null, '变体价格不一') : null),
     h('div', { className: 'ddp-model-actions' },
       h('button', { type: 'button', style: style.btn, disabled, onClick: () => (editing ? onCloseEditor() : onOpenEditor(model)) }, editing ? '收起参数' : hasOverrides ? '参数 (已覆盖)' : '参数'),
       hasOverrides || !enabled
@@ -792,6 +796,7 @@ function SettingsCard({ settings, disabled, onSave }) {
         }))),
     h('label', { style: style.field },
       h('span', { style: style.label }, '全局 API 服务地址（可选，留空使用 https://server.codeium.com 或 WINDSURF_API_SERVER_URL）'),
+      h('span', { style: style.muted }, '填写后，账号凭据会发送到该地址。'),
       h('input', {
         type: 'text', style: style.input, value: serverUrl, disabled,
         placeholder: 'https://server.codeium.com',
@@ -933,7 +938,8 @@ function AccountPanel({
                     isActive ? h(StatusChip, { tone: 'success' }, '当前使用') : null,
                     acc.identity?.plan ? h('span', { style: style.chip }, acc.identity.plan) : null,
                     h('span', { style: style.chip }, AUTH_MODE_LABELS[acc.authMode] ?? acc.authMode),
-                    h(StatusChip, { tone: acc.hasCredential ? 'success' : 'warn' }, acc.hasCredential ? '凭据就绪' : '缺少凭据'))),
+                    h(StatusChip, { tone: acc.hasCredential ? 'success' : 'warn' }, acc.hasCredential ? '凭据就绪' : '缺少凭据'),
+                    acc.identityVerified === false ? h(StatusChip, { tone: 'warn' }, '凭据未验证') : null)),
                 acc.credentialError ? h('p', { role: 'alert', style: style.error }, acc.credentialError) : null,
                 h('div', { className: 'ddp-actions' },
                   !isActive ? h('button', { type: 'button', style: style.primary, disabled: disabled || loginActive, onClick: () => onSelectAccount(acc.id) }, '使用此账号') : null,
@@ -1072,6 +1078,14 @@ function DevinProviderSection({ client }) {
       })
       .finally(() => { if (aliveRef.current && quotaEpochRef.current === epoch) setQuotaBusy(false); });
   };
+
+  const pullQuotaRef = react.useRef(pullQuota);
+  pullQuotaRef.current = pullQuota;
+  react.useEffect(() => {
+    if (!activeAccountId || !activeAccount?.hasCredential || !activeAccount) return;
+    const id = setInterval(() => { pullQuotaRef.current(); }, 60_000);
+    return () => clearInterval(id);
+  }, [activeAccountId, Boolean(activeAccount?.hasCredential)]);
 
   const toggleProvider = (enabled) => run('provider', async () => {
     try {

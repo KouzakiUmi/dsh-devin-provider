@@ -31,10 +31,10 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: ${{ matrix.node }}
-      - name: Check JavaScript and plugin boundaries
-        run: node scripts/check.mjs
       - name: Build plugin
         run: node scripts/build.mjs
+      - name: Check JavaScript and plugin boundaries
+        run: node scripts/check.mjs
       - name: Run isolated tests
         run: node --test test/*.test.mjs
 

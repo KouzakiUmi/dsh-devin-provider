@@ -24,6 +24,14 @@ export const Config = z.object({
   devinCliPath: z.string().description('可选：devin CLI 原生可执行文件绝对路径').default('')
 });
 
+function routingFingerprint(routes, facts, defaults) {
+  return JSON.stringify([
+    routes,
+    [...facts.entries()].map(([id, row]) => [id, row.enabled, row.effective]),
+    [...defaults.entries()]
+  ]);
+}
+
 export function apply(ctx, config) {
   const root = config.statePath || join(homedir(), '.dsh', 'dsh-devin-provider', 'state.json');
   const fallbackCredDir = join(dirname(root), 'credentials');
@@ -172,6 +180,15 @@ export function apply(ctx, config) {
       }
 
       const facts = new Map(getModelRows(state, state.activeAccountId).map((row) => [row.id, row]));
+      const fingerprint = routingFingerprint(routes, facts, nextDefaults);
+      if (registration && previous?.fingerprint === fingerprint) {
+        const owner = state.accounts.find((a) => a.id === state.activeAccountId);
+        controller.appliedAccount = owner
+          ? { id: owner.id, displayName: owner.identity?.email || owner.identity?.name || owner.label }
+          : null;
+        controller.routingError = undefined;
+        return;
+      }
       nextAdapter = createDevinAdapter(
         { LlmAdapter, LlmError, PiAiAdapter, InMemoryCredentialStore, AssistantMessageEventStream, calculateCost, resolveRetryPolicy },
         {
@@ -191,7 +208,7 @@ export function apply(ctx, config) {
         await nextAdapter.dispose();
         return;
       }
-      nextGeneration = { adapter: nextAdapter, defaults: nextDefaults };
+      nextGeneration = { adapter: nextAdapter, defaults: nextDefaults, fingerprint };
       nextGeneration.lease = createAdapterLease(
         async () => {
           try {
@@ -219,7 +236,7 @@ export function apply(ctx, config) {
     } catch (error) {
       if (nextGeneration) await nextGeneration.lease.dispose();
       else await nextAdapter?.dispose();
-      controller.routingError ??= 'Devin 模型路由更新失败；已保留此前可用路由。请检查路由冲突、模型缓存或 Core 兼容性后重试。';
+      controller.routingError = 'Devin 模型路由更新失败；已保留此前可用路由。请检查路由冲突、模型缓存或 Core 兼容性后重试。';
       throw new Error(controller.routingError, { cause: error });
     }
     if (previous) await previous.lease.retire().catch(() => ctx.logger.error('旧 Devin 模型适配器清理失败'));

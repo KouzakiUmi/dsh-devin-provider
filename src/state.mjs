@@ -74,7 +74,7 @@ export function normalizeIdentity(value) {
 
 export function account(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('账号格式错误');
-  const allowed = ['id', 'label', 'authMode', 'apiKeyRef', 'server', 'identity', 'loggedAt', 'credentialStored'];
+  const allowed = ['id', 'label', 'authMode', 'apiKeyRef', 'server', 'identity', 'loggedAt', 'credentialStored', 'identityVerified'];
   if (Object.keys(input).some((k) => !allowed.includes(k))) {
     throw new Error('账号数据包含不支持的字段或明文凭据');
   }
@@ -103,7 +103,8 @@ export function account(input) {
     ...(server ? { server } : {}),
     ...(Object.keys(identity).length ? { identity } : {}),
     ...(loggedAt ? { loggedAt } : {}),
-    ...(credentialStored ? { credentialStored: true } : {})
+    ...(credentialStored ? { credentialStored: true } : {}),
+    ...(typeof input.identityVerified === 'boolean' ? { identityVerified: input.identityVerified } : {})
   };
 }
 

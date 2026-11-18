@@ -1,0 +1,7 @@
+# 致谢与参考说明
+
+本项目的 Devin/Windsurf Connect+Proto 协议转换、模型家族折叠与思考签名透传策略参考了 `@magpie-community/opencode-devin-auth`（MIT 许可，仓库：https://github.com/magpie-community/plugins，`packages/devin`）的公开实现。
+
+本项目的设置页交互、发布与 CI 结构参考了同作者的 `dsh-volcengine-provider`。
+
+以上项目的 MIT 许可条款见各自上游仓库的 LICENSE 文件。

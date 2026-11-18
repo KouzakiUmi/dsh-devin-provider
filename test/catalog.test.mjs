@@ -47,6 +47,21 @@ test('listed collapses families, keeps fast/priority & no-effort variants, and m
   assert.deepEqual(opusFast.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
 });
 
+test('listed marks partially-free and mixed-price families', () => {
+  const free = new Set(['swe-2-high']);
+  const prices = new Map([
+    ['swe-2-medium', { input: 1, output: 2, cache: { read: 0 } }],
+    ['swe-2-high', { input: 3, output: 4, cache: { read: 0 } }]
+  ]);
+  const entries = listed(SNAPSHOT_FAMILIES, SNAPSHOT_IMAGES, free, prices);
+  const swe = entries.find((m) => m.id === 'swe-2');
+  assert.ok(swe);
+  assert.equal(swe.free, undefined);
+  assert.equal(swe.mixedFree, true);
+  assert.equal(swe.cost, undefined);
+  assert.equal(swe.mixedCost, true);
+});
+
 test('protobuf GetCliModelConfigs parsers read images, free tier, prices, and families', () => {
   const floatBytes = new Uint8Array(4);
   new DataView(floatBytes.buffer).setFloat32(0, 3.5, true);

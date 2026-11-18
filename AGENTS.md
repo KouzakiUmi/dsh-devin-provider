@@ -27,7 +27,8 @@
 - 仓库：`KouzakiUmi/dsh-devin-provider`，`main` 分支；`lib/` 为生成产物不提交，`.gitignore` 排除构建产物、缓存与本地 tarball。
 - CI：`ci.yml` 为检查（Ubuntu/Windows × Node 22.19.0/24）→ 打包校验 → npm 发布 → GitHub Release 四段；标签发布复用同一次运行已验证的归档。详细流程见[开发与发布](docs/development.md)。
 - 打包：`scripts/pack.py` 按 `package.json` 的 `files` 生成 tarball 与 SHA256；`scripts/verify-package.py` 校验身份、校验和、必要文件、manifest 入口与归档内 `lib/*.mjs` 相对导入闭包。
-- 发布：npm Trusted Publisher 绑定在 `ci.yml`（owner `KouzakiUmi`、workflow 文件名 `ci.yml`、environment 留空、允许直接发布）。npm 不支持为尚不存在的包预配置信任，故 `0.1.1` 由维护者本机首次发布（npm 网页 Windows Hello 登录），后续 `v*` 标签由 CI 通过 OIDC 发布；普通版本用 `latest`，预发行版本用 `next`。
+- 发布：npm Trusted Publisher 绑定在 `ci.yml`（owner `KouzakiUmi`、workflow 文件名 `ci.yml`、environment 留空、允许直接发布）。npm 12 的 `createPackage` 权限允许为尚不存在的包绑定信任并完成首次 OIDC 发布，`0.1.1` 与 `0.1.2` 均由 CI 发布；普通版本用 `latest`，预发行版本用 `next`。
+- 参考实现与许可：协议与家族折叠策略参考 `@magpie-community/opencode-devin-auth`（MIT），设置页与发布结构参考 `dsh-volcengine-provider`，说明见 `NOTICE`。
 - 提交使用账号已验证的 SSH 签名；发布前核验 GitHub 的 Verified 判定。
 
 ## 0.1.1 发布前审查修复
@@ -39,3 +40,11 @@
 - 流式消费提前结束时关闭底层帧生成器，释放 `ReadableStream` reader 锁。
 - 卸载时清理思考签名与 Gemini thought 模块级缓存；PKCE 令牌交换的超时与取消信号联动；CLI `api_server_url` 未经校验的值回退默认服务地址。
 - `scripts/check.mjs` 的 Client 边界检查覆盖 `src/remote.mjs` 与构建产物 `lib/client.js`。
+
+## 0.1.2 变更
+
+- 保存 API Key 时弱校验结果（网络失败无法在线核验）记录为 `identityVerified: false`，设置页显示「凭据未验证」提示。
+- `refreshAdapters` 用模型路由指纹比较，无关设置变更不再重建适配器；路由错误文案更新为最新具体原因。
+- 设置页额度每 60 秒自动刷新；错误提示中文化；自定义服务地址字段说明凭据会发送到该地址；混合免费/收费的模型家族显示对应标记。
+- 声明 `engines.dsh`，安装器对不兼容 Core 拒绝安装；CI 检查任务改为先构建再检查；`verify-package.py` 开发机路径校验覆盖无尾分隔符形式。
+- 文档修正首次发布说明（`createPackage` + OIDC），README 与开发文档改为事实陈述。

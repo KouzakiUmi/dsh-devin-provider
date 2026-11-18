@@ -34,13 +34,13 @@ def verify_package(directory, tag=None):
                 raise ValueError('Credential file included')
             if member.name.endswith(('.js', '.mjs', '.json', '.md', '.yml')):
                 text = archive.extractfile(member).read().decode('utf-8')
-                if re.search(r'(?i)[a-z]:[\\/]Users[\\/][^\\/\s]+[\\/]', text):
+                if re.search(r'''(?i)[a-z]:[\\/]Users[\\/][^\\/\s"']+''', text):
                     raise ValueError('Development-machine path included')
         required = {
             'package/package.json', 'package/lib/index.mjs', 'package/lib/client.js',
             'package/lib/catalog-snapshot.json', 'package/cordis.patch.yml',
             'package/README.md', 'package/LICENSE', 'package/CHANGELOG.md',
-            'package/icon.svg', 'package/locale/en.json', 'package/locale/zh.json',
+            'package/icon.svg', 'package/NOTICE', 'package/locale/en.json', 'package/locale/zh.json',
         }
         if not required.issubset(names):
             raise ValueError('Required plugin files missing')

@@ -55,14 +55,21 @@ npm trust list dsh-devin-provider --json
 
 ## 首次发布与后续版本
 
-**npm 不支持为尚不存在的包预配置 Trusted Publisher**，OIDC 无法创建全新包。因此 `0.1.1` 由维护者本机完成首次发布：使用 Windows Hello 在 npm 官方网页完成登录确认，然后用已校验的归档发布。
+npm 12 起的 Trusted Publisher 支持 `createPackage` 权限：为尚不存在的包绑定 GitHub Actions 后，CI 可以用 OIDC 直接创建包并完成首次发布（`0.1.1` 与 `0.1.2` 均由 CI 发布）。绑定需要账号 2FA 网页授权：
 
 ```sh
-npm publish ./release-artifacts/dsh-devin-provider-0.1.1.tgz \
+npm trust github dsh-devin-provider --repo KouzakiUmi/dsh-devin-provider --file ci.yml --allow-publish
+npm trust list dsh-devin-provider --json
+```
+
+也可以本机人工发布作为备选（需要 npm 登录与 OTP）：
+
+```sh
+npm publish ./release-artifacts/dsh-devin-provider-<version>.tgz \
   --access public --tag latest --ignore-scripts --registry=https://registry.npmjs.org/
 ```
 
-首次发布成功后，在 npm 包设置中按上表绑定 Trusted Publisher（要求账号有写权限且启用 2FA）。后续版本只需更新 `package.json` 版本号、提交代码并推送同版本标签：
+后续版本：更新 `package.json` 版本号、提交代码并推送同版本标签。
 
 ```sh
 git tag -a v<version> -m "Release v<version>"
@@ -72,9 +79,10 @@ git push origin v<version>
 - 普通版本（含 `0.x`）发布到 npm `latest`；带预发行后缀的版本使用 `next`，GitHub Release 标为 prerelease。
 - 标签须与包版本一致；已发布版本会被跳过，不会覆盖。
 - CI 发布后核对 registry 精确版本；发布成功的版本不可覆盖。
+- npm 会为新包创建 `0.0.0-stage` 临时占位版本（staged publishing 机制），不影响 `latest`。
 
 本机 Windows Hello、密码与长期发布 token 留在本机，仓库不保存 npm token。
 
-## 验证边界
+## 验证范围
 
-工作区内的静态检查、构建产物校验、单元测试与 Core 兼容性探针均通过；真实在线 `server.codeium.com` 推理、浏览器人工界面操作与安装到 DSH Profile 后的实测未包含在本仓库 CI 中，需由维护者实测。
+仓库 CI 与本地脚本覆盖：静态检查、构建产物校验、单元测试、Core 兼容性探针。在线推理与浏览器界面操作不在 CI 覆盖范围内。

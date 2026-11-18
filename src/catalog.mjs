@@ -147,11 +147,21 @@ function familyImages(f, images) {
 }
 
 export function listed(families, images = {}, free = new Set(), prices = new Map()) {
-  const all = (ids) => ids.length > 0 && ids.every((id) => free.has(id));
   const priced = (ids) => {
     const ps = ids.map((id) => prices.get(id));
     if (!ps.length || !ps[0] || ps.some((p) => JSON.stringify(p) !== JSON.stringify(ps[0]))) return undefined;
     return ps[0];
+  };
+  const freeFlags = (ids) => {
+    const any = ids.some((id) => free.has(id));
+    const every = ids.length > 0 && ids.every((id) => free.has(id));
+    return { free: every, ...(any && !every ? { mixedFree: true } : {}) };
+  };
+  const costFlags = (ids) => {
+    const ps = ids.map((id) => prices.get(id));
+    if (ps.length > 1 && ps.some((p) => p && JSON.stringify(p) !== JSON.stringify(ps[0]))) return { mixedCost: true };
+    const cost = priced(ids);
+    return cost ? { cost } : {};
   };
   const own = (f, t) => {
     const ids = Object.values(byLevel(f, t));
@@ -160,10 +170,16 @@ export function listed(families, images = {}, free = new Set(), prices = new Map
   };
   const out = [];
   const seen = new Set();
-  const add = ({ free: isFree, cost, ...m }) => {
+  const add = ({ free: isFree, cost, mixedFree, mixedCost, ...m }) => {
     if (seen.has(m.id)) return;
     seen.add(m.id);
-    out.push({ ...m, ...(isFree ? { free: true } : cost ? { cost } : {}) });
+    out.push({
+      ...m,
+      ...(isFree ? { free: true } : {}),
+      ...(mixedFree ? { mixedFree: true } : {}),
+      ...(cost ? { cost } : {}),
+      ...(mixedCost ? { mixedCost: true } : {})
+    });
   };
   for (const f of families) {
     const context = f.models.find((m) => m.context)?.context ?? 0;
@@ -176,8 +192,8 @@ export function listed(families, images = {}, free = new Set(), prices = new Map
       output,
       efforts: efforts(f, ''),
       image,
-      free: all(own(f, '')),
-      cost: priced(own(f, ''))
+      ...freeFlags(own(f, '')),
+      ...costFlags(own(f, ''))
     });
     for (const t of tiers(f)) {
       const id = f.uid + '-' + t;
@@ -189,8 +205,8 @@ export function listed(families, images = {}, free = new Set(), prices = new Map
         output,
         efforts: efforts(f, t),
         image,
-        free: all(own(f, t)),
-        cost: priced(own(f, t))
+        ...freeFlags(own(f, t)),
+        ...costFlags(own(f, t))
       });
     }
     if (f.models.length === 1) continue;

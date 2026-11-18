@@ -38,7 +38,7 @@ dsh plugin --profile web add "<tarball 的绝对路径>"
 2. 首次接入后在账号卡片刷新模型目录与额度；模型卡片按需调整上下文长度、输出上限、温度、图片输入、工具调用与思考档位。
 3. 在 DSH 模型选择器中选择 `devin` 路由，开始使用。
 
-安装／更新后按部署方式重新启动或重载 DSH，让 Host 插件重新加载。npm 徽章显示实际已发布版本；`main`、版本字段与当前运行会话不自动等同。不要把 GitHub 源码 ZIP 当作验证过的发布包。
+安装／更新后按部署方式重新启动或重载 DSH，让 Host 插件重新加载。npm 徽章显示 npm 上实际发布的版本；GitHub Release 中的 `dsh-devin-provider-<version>.tgz` 与 npm 发布归档由同一次 CI 运行生成。
 
 ## 主要功能
 
@@ -76,7 +76,7 @@ dsh plugin --profile web add "<tarball 的绝对路径>"
 - **DSH Core**：`>=0.2.1-rc.4 <0.3.0 || >=0.2.2-rc.1 <0.3.0`；`@earendil-works/pi-ai`：`>=1.1.0 <2.0.0`。兼容性以目标进程实际加载的 Core 及其导出类型为准。
 - **Node.js**：`>=22.19.0`。
 - **账号**：可用的 Devin 订阅；`cli` 方式需本机已用 `devin auth login` 登录。
-- 当前验证以工作区内的静态检查、构建产物校验、单元测试与 Core 兼容性探针为准；真实在线 `server.codeium.com` 推理、浏览器人工界面操作与安装到 DSH Profile 后的实测需由使用者验收。
+- 工作区验证覆盖静态检查、构建产物校验、单元测试与 Core 兼容性探针；在线推理与浏览器界面操作不在仓库 CI 覆盖范围内。
 
 ## 构建与验证
 
@@ -95,4 +95,4 @@ python scripts/verify-package.py release-artifacts
 
 [提交 Issue](https://github.com/KouzakiUmi/dsh-devin-provider/issues) · [GitHub Releases](https://github.com/KouzakiUmi/dsh-devin-provider/releases)
 
-[MIT](LICENSE)。
+[MIT](LICENSE) · 第三方参考说明见 [NOTICE](NOTICE)。

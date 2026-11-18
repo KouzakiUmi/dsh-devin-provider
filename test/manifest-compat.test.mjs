@@ -57,7 +57,7 @@ function satisfies(version, range, { includePrerelease = false } = {}) {
 }
 
 test('DSH Core peerDependencies cover verified host versions including 0.2.2-rc.3', () => {
-  assert.equal(manifest.engines?.dsh, undefined);
+  assert.equal(manifest.engines?.dsh, CORE_RANGE);
   for (const name of CORE_PEERS) {
     assert.equal(manifest.peerDependencies[name], CORE_RANGE, name);
   }
@@ -82,5 +82,4 @@ test('cordis, schemastery, and pi-ai peerDependencies match current DSH runtime'
 
 test('manifest version is a plain release version (no prerelease suffix)', () => {
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
-  assert.equal(manifest.version, '0.1.1');
 });
