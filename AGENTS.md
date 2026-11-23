@@ -49,7 +49,7 @@
 - 声明 `engines.dsh`，安装器对不兼容 Core 拒绝安装；CI 检查任务改为先构建再检查；`verify-package.py` 开发机路径校验覆盖无尾分隔符形式。
 - 文档修正首次发布说明（`createPackage` + OIDC），README 与开发文档改为事实陈述。
 
-## Fusion 支持与读缓存中间层（未发布）
+## Fusion 支持与读缓存中间层（0.1.3 发布）
 
 ### Fusion（lead + sidekick 路由家族）
 - **协议照抄本机 Devin CLI**（3000.14.30821 实测抓包确认）：组合路由 uid `fusion-<leadUid>-sidekick-<sidekickUid>`（如 `fusion-claude-fable-5-2-high-sidekick-swe-2-high`）→ `AssignModel`（unary proto，`application/proto`，field 2=routerUid、3=cascadeId、5=当前用户轮）→ 返回 **lead 的 modelUid + assignmentJwt** → `GetChatMessage` 以 field 21=lead uid、field 26=JWT、field 16=同一 cascadeId 发出；服务端凭 JWT 后台编排 lead+sidekick。
