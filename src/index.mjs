@@ -9,8 +9,8 @@ import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai';
 import { AssistantMessageEventStream, InMemoryCredentialStore, calculateCost } from '@earendil-works/pi-ai';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { DevinController } from './manager.mjs';
-import { ROUTE_ID, assertAccountId } from './state.mjs';
-import { getModelRows, profileFor } from './catalog.mjs';
+import { FUSION_MODEL_ID, ROUTE_ID, assertAccountId } from './state.mjs';
+import { getModelRows, profileFor, fusionConfigOf } from './catalog.mjs';
 import { devinRemote } from './remote.mjs';
 import { applyModelDefaults, captureModelDefaults, describeModelDefaults, getModelDefaults } from './model-defaults.mjs';
 import { createAdapterLease, leasedStream } from './adapter-lease.mjs';
@@ -180,7 +180,8 @@ export function apply(ctx, config) {
       }
 
       const facts = new Map(getModelRows(state, state.activeAccountId).map((row) => [row.id, row]));
-      const fingerprint = routingFingerprint(routes, facts, nextDefaults);
+      facts.set(FUSION_MODEL_ID, { id: FUSION_MODEL_ID, enabled: true, effective: { toolsEnabled: true } });
+      const fingerprint = routingFingerprint(routes, facts, nextDefaults) + ':fusion:' + JSON.stringify(state.fusion ?? {});
       if (registration && previous?.fingerprint === fingerprint) {
         const owner = state.accounts.find((a) => a.id === state.activeAccountId);
         controller.appliedAccount = owner
@@ -199,6 +200,16 @@ export function apply(ctx, config) {
             return owner ? controller.resolveCredential(owner) : undefined;
           },
           keepaliveConfig: () => controller.store.current?.settings?.cacheKeepalive,
+          resolveFusion: () => {
+            const st = controller.store.current;
+            return fusionConfigOf(st, st?.activeAccountId);
+          },
+          resolveFastMode: (sessionId) => {
+            const id = typeof sessionId === 'string' ? sessionId.trim() : '';
+            if (!id) return false;
+            const st = controller.store.current;
+            return Boolean(st?.fastSessions?.[id]);
+          },
           resolveAttachments: () => ctx.get('attachments'),
           resolveImageAccess: (attachments, ref) =>
             resolveImageAttachmentAccess(attachments, (hostPath) => ctx.get('fs')?.processPathFromHostPath(hostPath), ref)
@@ -278,7 +289,11 @@ export function apply(ctx, config) {
   ctx.on('credentials/reference-updated', () => controller.clearCaches());
   ctx.on('credentials/record-updated', () => controller.clearCaches());
 
-  controller.ready = controller.store.load().then(queueRoutingUpdate).catch(() => {
+  controller.ready = controller.store.load().then(async () => {
+    await controller.ensureQuotaCacheLoaded();
+    controller.startBackgroundRefresh();
+    return queueRoutingUpdate();
+  }).catch(() => {
     controller.routingError ??= '初始化失败：请检查账号元数据和模型缓存；原文件未覆盖。';
     ctx.logger.error('Devin Provider 初始化失败；请在设置页查看状态');
   });

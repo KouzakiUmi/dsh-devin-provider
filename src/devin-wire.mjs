@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { CHAT_RPC, PB, dec, failure, fields, frame, frames, inID, metadata, outID, rpcHeaders } from './pb.mjs';
+import { ASSIGN_MODEL_RPC, CHAT_RPC, PB, dec, failure, fields, frame, frames, inID, metadata, outID, rpcHeaders } from './pb.mjs';
 import { isClaude, variantFor } from './catalog.mjs';
 import { keepaliveKey, keepaliveSettings, scheduleKeepalive, stopKeepalive } from './keepalive.mjs';
 
@@ -243,7 +243,10 @@ export function encodeRequest(msgs, tools, chat, uid, key) {
     out.varint(7, 5);
     out.bytes(8, sampling(max));
     for (const t of toolParts) out.bytes(10, t);
-    return out.str(21, uid).done();
+    out.str(21, uid);
+    if (chat.cascadeId) out.str(16, chat.cascadeId);
+    if (chat.assignmentJwt) out.str(26, chat.assignmentJwt);
+    return out.done();
   };
 
   return {
@@ -302,7 +305,7 @@ function systemMessageText(m, isInitial) {
 /**
  * Convert a pi-ai Context / TranscriptContext + model + options into a Devin GetChatMessage protobuf request.
  */
-export function buildFromPiContext(model, context, options, uid, key, { toolsEnabled = true } = {}) {
+export function buildFromPiContext(model, context, options, uid, key, { toolsEnabled = true, cascadeId = '', assignmentJwt = '' } = {}) {
   const claude = isClaude(uid);
   const msgs = [];
   const notices = [];
@@ -469,7 +472,7 @@ export function buildFromPiContext(model, context, options, uid, key, { toolsEna
   }
 
   const max = options?.maxTokens ?? model?.maxTokens ?? 128000;
-  const req = encodeRequest(msgs, tools, { max, temperature: options?.temperature }, uid, key);
+  const req = encodeRequest(msgs, tools, { max, temperature: options?.temperature, cascadeId, assignmentJwt }, uid, key);
   req.offeredToolNames = new Set(tools.map((t) => t.name));
   return req;
 }
@@ -689,6 +692,20 @@ export async function* events(it, uid = '', offeredToolNames = null) {
           else if (g.num === 4) usage.cacheWrite = g.n;
           else if (g.num === 5) usage.cacheRead = g.n;
         }
+      } else if (x.num === 28 && x.wire === 2) {
+        // fusionUsage: responseDimensionGroups -> pricing/usage
+        const groups = [];
+        for (const g of fields(x.data)) {
+          if (g.wire === 2) {
+            const s = dec.decode(g.data);
+            try {
+              const parsed = JSON.parse(s);
+              if (parsed?.pricing) {
+                usage.pricing = { ...usage.pricing, ...parsed.pricing };
+              }
+            } catch {}
+          }
+        }
       }
     }
   }
@@ -734,6 +751,73 @@ function parseArgsWithError(raw) {
   }
 }
 
+// ── Fusion 路由（lead + sidekick，服务端编排）─────────────────────────────────
+// 照抄本机 Devin CLI：组合路由 uid `fusion-<leadUid>-sidekick-<sidekickUid>`，
+// 先经 AssignModel（unary proto）解析出 lead 的 modelUid 与授权 JWT，
+// GetChatMessage 再以 lead uid + field 26 JWT + 同一 cascadeId 发出。
+export const FUSION_MODEL_ID = 'fusion';
+export const isFusion = (id) => String(id ?? '').toLowerCase() === FUSION_MODEL_ID;
+const GPT_PRIORITY_SIDEKICKS = new Set(['gpt-5-6-luna', 'gpt-5-6-sol', 'gpt-6-luna', 'gpt-6-1-terra']);
+
+export function fusionRouterUid(config) {
+  const leadRaw = String(config?.lead ?? '').trim();
+  const sidekickRaw = String(config?.sidekick ?? '').trim();
+  if (!leadRaw || !sidekickRaw) throw new Error('Fusion 需要同时配置 lead 与 sidekick 模型');
+  const norm = (s) => s.replace(/\.(?=\d)/g, '-');
+  const lead = norm(leadRaw);
+  const sidekick = norm(sidekickRaw);
+  const leadEffort = config?.leadEffort;
+  const sidekickEffort = config?.sidekickEffort;
+  // fastAllowed=false 表示当前 lead+sidekick 组合在官方路由表中没有快速变体：
+  // 即使会话开关残留，也不追加 -fast，避免发出不存在的组合路由。
+  const fastMode = config?.fastMode === true && config?.fastAllowed !== false;
+  // 组合格式：fusion-<leadUid>-sidekick-<sidekickUid>
+  // Fast Mode: Lead 追加 `-fast`；官方路由表中 GPT Sidekick 需同步追加 `-priority`，SWE / Claude / GLM Sidekick 保持原后缀。
+  const leadUid = `${lead}${leadEffort ? `-${leadEffort}` : ''}${fastMode ? '-fast' : ''}`;
+  const sidekickPriority = fastMode && GPT_PRIORITY_SIDEKICKS.has(sidekick);
+  const sidekickUid = `${sidekick}${sidekickEffort ? `-${sidekickEffort}` : ''}${sidekickPriority ? '-priority' : ''}`;
+  return `fusion-${leadUid}-sidekick-${sidekickUid}`;
+}
+
+function lastUserPromptText(context) {
+  const msgs = context?.messages ?? [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m?.role !== 'user') continue;
+    const { texts } = piImagesAndTexts(m.content);
+    const text = texts.join('\n\n');
+    if (text) return text;
+  }
+  return '';
+}
+
+export async function assignModel({ key, server, routerUid, cascadeId, promptText, fetchImpl = fetch, signal }) {
+  const prompt = new PB().str(1, '').varint(2, USER).str(3, promptText || '').done();
+  const req = new PB().bytes(1, metadata(key).done()).str(2, routerUid).str(3, cascadeId).bytes(5, prompt).done();
+  const res = await fetchImpl(server + ASSIGN_MODEL_RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/proto', 'Connect-Protocol-Version': '1', Authorization: 'Basic ' + key },
+    body: req,
+    signal
+  });
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (!res.ok) {
+    const err = failure(res.status, dec.decode(buf).slice(0, 1 << 16));
+    throw Object.assign(new Error(err.message), { status: err.status });
+  }
+  let modelUid = '';
+  let jwt = '';
+  for (const f of fields(buf)) {
+    if (f.num !== 1 || f.wire !== 2) continue;
+    for (const g of fields(f.data)) {
+      if (g.num === 1 && g.wire === 2) jwt = dec.decode(g.data);
+      else if (g.num === 2 && g.wire === 2) modelUid = dec.decode(g.data);
+    }
+  }
+  if (!modelUid || !jwt) throw Object.assign(new Error('Fusion 分配失败：服务端未返回模型与授权'), { status: 502 });
+  return { modelUid, jwt };
+}
+
 /**
  * Stream a pi-ai model call over Devin's Connect+Proto GetChatMessage RPC,
  * emitting pi-ai AssistantMessageEvents into an AssistantMessageEventStream.
@@ -749,6 +833,8 @@ export function streamDevinChat({
   toolsEnabled = true,
   requestedEffort,
   keepaliveConfig,
+  fusionConfig,
+  fastMode = false,
   fetchImpl = fetch
 }) {
   const stream = new AssistantMessageEventStream();
@@ -790,10 +876,28 @@ export function streamDevinChat({
       const kaId = ka.enabled ? keepaliveKey(context, options) : '';
       if (kaId) stopKeepalive(kaId);
 
+      const fast = typeof fastMode === 'function' ? Boolean(await fastMode(options)) : Boolean(fastMode);
       const effort = requestedEffort !== undefined ? requestedEffort : options?.reasoning;
-      const uid = variantFor(families, model.id, effort);
+      let uid = variantFor(families, model.id, effort, { fast });
+      let cascadeId = '';
+      let assignmentJwt = '';
+      if (isFusion(model.id)) {
+        const rawCfg = typeof fusionConfig === 'function' ? await fusionConfig(options) : fusionConfig;
+        const wantFast = Boolean(rawCfg?.fastMode || fast);
+        const cfg = { ...(rawCfg ?? {}), fastMode: wantFast && rawCfg?.fastAllowed !== false };
+        const routerUid = fusionRouterUid(cfg);
+        cascadeId = randomUUID();
+        let assignment;
+        try {
+          assignment = await assignModel({ key, server, routerUid, cascadeId, promptText: lastUserPromptText(context), fetchImpl, signal: options?.signal });
+        } catch (e) {
+          return failStream(e?.status || 502, `Fusion 模型分配失败：${e?.message || String(e)}`);
+        }
+        uid = assignment.modelUid;
+        assignmentJwt = assignment.jwt;
+      }
       const claude = isClaude(uid);
-      const { bytes, makePing, offeredToolNames } = buildFromPiContext(model, context, options, uid, key, { toolsEnabled });
+      const { bytes, makePing, offeredToolNames } = buildFromPiContext(model, context, options, uid, key, { toolsEnabled, cascadeId, assignmentJwt });
       const body = frame(bytes);
       const sentAt = Date.now();
 
@@ -828,6 +932,8 @@ export function streamDevinChat({
       }
 
       const source = eventsWithCleanup(prepend(first.value, fr), uid, offeredToolNames);
+      let actualModelUid = '';
+      let pricing = {};
       const head = await source.next();
       if (head.done) return failStream(502, '空回复');
       if (head.value.error) {

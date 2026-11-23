@@ -1,7 +1,7 @@
 {
   "name": "dsh-devin-provider",
   "displayName": "Devin Provider",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "DeepSeek Harness Devin Provider: Browser PKCE / CLI / API Key auth, model catalog & per-model overrides, quota dashboard, and 5-minute prompt cache keepalive.",
   "author": "KouzakiUmi",
   "repository": {

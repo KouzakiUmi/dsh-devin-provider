@@ -193,6 +193,47 @@ export function normalizeKeepaliveSettings(input) {
   return { enabled, intervalSec, maxPings };
 }
 
+export const FUSION_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+export const FUSION_MODEL_ID = 'fusion';
+
+export function normalizeFusionConfig(input) {
+  if (input === undefined || input === null) return {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Fusion 配置格式错误');
+  const allowed = ['lead', 'leadEffort', 'sidekick', 'sidekickEffort', 'fastMode'];
+  for (const key of Object.keys(input)) {
+    if (!allowed.includes(key)) throw new Error(`Fusion 配置包含未知字段：${key}`);
+  }
+  const out = {};
+  for (const key of ['lead', 'sidekick']) {
+    if (input[key] === undefined) continue;
+    if (typeof input[key] !== 'string' || !input[key].trim()) throw new Error(`Fusion ${key} 必须是非空字符串`);
+    assertModelId(input[key]);
+    out[key] = input[key].trim();
+  }
+  for (const key of ['leadEffort', 'sidekickEffort']) {
+    if (input[key] === undefined) continue;
+    if (typeof input[key] !== 'string' || !FUSION_EFFORTS.includes(input[key])) throw new Error(`Fusion ${key} 档位不受支持`);
+    out[key] = input[key];
+  }
+  if (input.fastMode !== undefined) {
+    if (typeof input.fastMode !== 'boolean') throw new Error('Fusion fastMode 必须是布尔值');
+    out.fastMode = input.fastMode;
+  }
+  return out;
+}
+
+function normalizeFusionMap(value, accounts) {
+  const result = {};
+  if (value === undefined || value === null) return result;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('Fusion 配置格式错误');
+  for (const [accountId, config] of Object.entries(value)) {
+    if (!accounts.some((a) => a.id === accountId)) continue;
+    const normalized = normalizeFusionConfig(config);
+    if (Object.keys(normalized).length) setKey(result, accountId, normalized);
+  }
+  return result;
+}
+
 function normalizeModelSettingsMap(value, accounts) {
   const result = {};
   if (value === undefined || value === null) return result;
@@ -212,6 +253,39 @@ function normalizeModelSettingsMap(value, accounts) {
   return result;
 }
 
+export const MAX_FAST_SESSIONS = 500;
+
+export function assertSessionId(sessionId) {
+  if (
+    typeof sessionId !== 'string' ||
+    !sessionId.trim() ||
+    sessionId.length > 256 ||
+    /[\x00-\x1f\x7f]/.test(sessionId) ||
+    reservedNames.includes(sessionId)
+  ) {
+    throw new Error('会话 ID 不合法');
+  }
+  return sessionId;
+}
+
+function normalizeFastSessions(value) {
+  const result = {};
+  if (value === undefined || value === null) return result;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('会话快速模式配置格式错误');
+  const entries = Object.entries(value);
+  let kept = 0;
+  for (let i = Math.max(0, entries.length - MAX_FAST_SESSIONS); i < entries.length; i++) {
+    const [sessionId, flag] = entries[i];
+    assertSessionId(sessionId);
+    if (typeof flag !== 'boolean') throw new Error('快速模式开关必须是布尔值');
+    if (flag) {
+      setKey(result, sessionId, true);
+      kept++;
+    }
+  }
+  return result;
+}
+
 export function initialState() {
   return {
     version: STATE_VERSION,
@@ -223,7 +297,9 @@ export function initialState() {
       serverUrl: ''
     },
     catalogs: {},
-    modelSettings: {}
+    modelSettings: {},
+    fusion: {},
+    fastSessions: {}
   };
 }
 
@@ -254,7 +330,10 @@ export function validateState(value) {
     }
   }
   const modelSettings = normalizeModelSettingsMap(value.modelSettings, accounts);
-  return { version: STATE_VERSION, accounts, activeAccountId, enabled, settings, catalogs, modelSettings };
+  const fusion = normalizeFusionMap(value.fusion, accounts);
+  // 注：早期全局按账号保存的 fastMode 在此安全忽略，避免全局开关继续生效；快速模式改为按会话独立保存（fastSessions）。
+  const fastSessions = normalizeFastSessions(value.fastSessions);
+  return { version: STATE_VERSION, accounts, activeAccountId, enabled, settings, catalogs, modelSettings, fusion, fastSessions };
 }
 
 export const revision = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');

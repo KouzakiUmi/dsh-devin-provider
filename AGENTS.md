@@ -48,3 +48,24 @@
 - 设置页额度每 60 秒自动刷新；错误提示中文化；自定义服务地址字段说明凭据会发送到该地址；混合免费/收费的模型家族显示对应标记。
 - 声明 `engines.dsh`，安装器对不兼容 Core 拒绝安装；CI 检查任务改为先构建再检查；`verify-package.py` 开发机路径校验覆盖无尾分隔符形式。
 - 文档修正首次发布说明（`createPackage` + OIDC），README 与开发文档改为事实陈述。
+
+## Fusion 支持与读缓存中间层（未发布）
+
+### Fusion（lead + sidekick 路由家族）
+- **协议照抄本机 Devin CLI**（3000.14.30821 实测抓包确认）：组合路由 uid `fusion-<leadUid>-sidekick-<sidekickUid>`（如 `fusion-claude-fable-5-2-high-sidekick-swe-2-high`）→ `AssignModel`（unary proto，`application/proto`，field 2=routerUid、3=cascadeId、5=当前用户轮）→ 返回 **lead 的 modelUid + assignmentJwt** → `GetChatMessage` 以 field 21=lead uid、field 26=JWT、field 16=同一 cascadeId 发出；服务端凭 JWT 后台编排 lead+sidekick。
+- `devin-wire.mjs`：`assignModel()`、`fusionRouterUid()`、`isFusion()`；`encodeRequest`/`buildFromPiContext` 透传 cascadeId/assignmentJwt；`streamDevinChat` 对 fusion 先分配再推理，`claude` 思考判定按分配到的 lead uid。Fast Mode 的 lead `-fast` 与 GPT sidekick `-priority` 后缀按 `fastAllowed` 决定：官方组合表没有该 lead+sidekick 的快速变体时降级为标准组合，不发出不存在的路由。
+- `state.mjs`：`state.fusion[accountId] = {lead, leadEffort, sidekick, sidekickEffort}`，`normalizeFusionConfig` 校验；默认搭配 Opus 5.5 Medium + SWE-2 Medium（`FUSION_DEFAULT`）。
+- `catalog.mjs`：官方组合表来自 `devin models list` 的 `fusion-*` 路由；`fusionRouteMatrix()` 解析出每个 lead 的标准/fast sidekick 集合与各 sidekick 档位，`fusionOptions()` 据此过滤 lead 的 sidekick 下拉并给出 `fast`/`fastSidekicks`；`fusionConfigOf()` 把旧配置或手改配置回退到官方允许的 lead/sidekick/档位组合，并返回运行时派生字段 `fastAllowed`（不持久化）。`fusionDescriptor()` 随 lead 定 api/窗口；`profileFor` 追加唯一 `fusion` 路由模型（`reasoningEfforts:false`，lead 档位由 Fusion 配置决定，不走 DSH 逐次档位）。无组合表时退回静态 lead/sidekick 表。
+- `manager.mjs`：`saveFusion` op；`op:'models'` 先拉 `GetCliModelConfigs`，RPC 目录缺 `fusionRoutes` 时用 `devin models list` 补一次（CLI 不可用则保留 RPC 目录）；read 快照含 `fusion.{config,options,perAccount}`，其中 `config` 仅含可持久化字段。`index.mjs` 路由指纹纳入 fusion 配置，lead 变更触发适配器重建；`resolveFusion` 调用时读实时状态。
+- **UI**：设置页 `FusionCard`（lead/档位/sidekick/档位四选择器，sidekick 选项按 lead 的官方搭配过滤，切换 lead 时自动修正）；`FusionPillEntry` 经 `conversation.input.right` slot 注入聊天输入区药丸（参考 subusage），devin 路由激活时显示、点击即时切换搭配；⚡ 仅当当前 lead+sidekick 存在快速组合时显示。
+- **边界**：fusion 计费按 lead/sidekick 各自费率，描述符 cost 暂置 0，实际用量以服务端 `actualModelUid` 为准（尚未接入成本回填）。
+
+### 读缓存中间层（解耦上游拉取与 Client 读取）
+- **读路径**：`op:'quota'` 即时返回缓存快照（附 `refreshing`/`stale`），绝不阻塞等上游；无缓存时返回 `state:'loading'` 占位。
+- **刷新路径**：`startQuotaRefresh()` 后台拉上游回填缓存（inflight 去重）；`startBackgroundRefresh()` 每 30s 检查活跃账号缓存 TTL（ok 60s / 其它 15s）按需保暖，`dispose` 清理定时器。
+- **Client**：`pullQuota` 即时显示缓存，`refreshing` 时 800ms 廉价重读（30s 上限）；60s 轮询改为读缓存不强制上游；`QuotaWindows` 增 loading/刷新中指示。
+- 验收：`test/fusion.test.mjs` 19 项（协议组合/AssignModel 解析/field16/26/官方组合矩阵与 fast 限制/配置回退/fast 降级/目录动态选项/状态校验/profile 追加）；`state-and-manager` 增补 CLI 补全 `fusionRoutes` 测试；全量 53 项（52 通过、1 项既有跳过）、build + Client 边界/导入闭包检查通过。官方 995 条路由与 UI 可生成组合逐条相等（脚本核验）。
+
+### 插件审查结论（全模块）
+- pb/wire/adapter/index/catalog/state/manager/quota/keepalive/lease/defaults/oauth/cli/client 均已审查：凭据脱敏、accountId/路径穿越防护、PKCE state 校验、回调仅绑 127.0.0.1、HTML 转义、CLI spawn 无注入 + 隔离 home、状态锁 + 原子写齐全，未发现关键缺陷。
+- 先前两项疑似问题已定性：Claude「思考+摘要进 CoT」为 Devin 服务端多轮工具上下文行为（签名覆盖整段思考，须原样回放，不可拆分）；SWE-2 schema 写错为 magpie 插件侧问题，本插件目录/参数处理与参考实现一致。

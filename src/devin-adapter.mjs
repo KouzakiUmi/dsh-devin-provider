@@ -62,7 +62,7 @@ export function createDevinAdapter(deps, config) {
   for (const entry of input.models) {
     if (!object(entry) || typeof entry.id !== 'string' || !entry.id.trim() || seen.has(entry.id)) invalid();
     seen.add(entry.id);
-    const fact = config.facts.get(entry.id);
+    const fact = config.facts.get(entry.id) ?? (entry.id === 'fusion' ? { effective: { toolsEnabled: true } } : undefined);
     if (!object(fact)) invalid();
     const toolsEnabled = fact.effective?.toolsEnabled ?? true;
     const contextWindow = entry.contextWindow;
@@ -160,6 +160,8 @@ export function createDevinAdapter(deps, config) {
         toolsEnabled: control?.toolsEnabled ?? modelCtrl?.toolsEnabled ?? true,
         requestedEffort: mappedEffort,
         keepaliveConfig: config.keepaliveConfig?.() ?? config.keepalive,
+        fusionConfig: config.resolveFusion,
+        fastMode: (opts) => (typeof config.resolveFastMode === 'function' ? config.resolveFastMode(opts?.sessionId ?? control?.sessionId) : Boolean(config.fastMode)),
         fetchImpl: config.fetchImpl ?? fetch
       });
     };
@@ -251,7 +253,7 @@ export function createDevinAdapter(deps, config) {
       own(provider, model);
       if (signal?.aborted) fail('Devin 请求已取消', 'ABORTED');
       const modelCtrl = controls.get(model);
-      const control = { reasoningEffort: undefined, toolsEnabled: modelCtrl.toolsEnabled };
+      const control = { reasoningEffort: undefined, sessionId: undefined, toolsEnabled: modelCtrl.toolsEnabled };
       const key = { value: undefined };
       const callDelegate = delegate(control, key);
       const prepared = await callDelegate.prepareCall(provider, model, signal);
@@ -267,6 +269,7 @@ export function createDevinAdapter(deps, config) {
             fail('已准备的 Devin 请求不能切换模型或路由', 'INVALID_REQUEST');
           }
           control.reasoningEffort = options.reasoningEffort;
+          control.sessionId = typeof options.sessionId === 'string' ? options.sessionId : undefined;
           if (control.reasoningEffort === 'off' && !modelCtrl.supportsOff) {
             fail('当前模型未提供关闭思考档位', 'UNSUPPORTED_REASONING_EFFORT');
           }

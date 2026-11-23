@@ -8,7 +8,7 @@ import { DevinController } from '../src/manager.mjs';
 import { DevinOAuth } from '../src/oauth.mjs';
 import { parseUsageResponse } from '../src/quota.mjs';
 import { readCliCredentials } from '../src/cli.mjs';
-import { DEFAULT_SERVER } from '../src/pb.mjs';
+import { DEFAULT_SERVER, PB } from '../src/pb.mjs';
 
 test('StateStore enforces revision check, atomic write, and keeps secrets out of state.json', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'devin-state-'));
@@ -113,9 +113,17 @@ test('DevinController handles api-key grants, keepalive settings, model override
     const disk = await readFile(statePath, 'utf8');
     assert.equal(disk.includes('cog_test_secret_123'), false);
 
-    // Quota check
-    const q = await controller.invoke({ op: 'quota', accountId: 'work', force: true });
+    // Quota check —— 中间层契约：即时返回缓存/占位（不阻塞上游），后台回填后再读
+    const q0 = await controller.invoke({ op: 'quota', accountId: 'work', force: true });
+    assert.equal(q0.refreshing, true);
+    let q = q0;
+    const deadline = Date.now() + 2000;
+    while (q.refreshing && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10));
+      q = await controller.invoke({ op: 'quota', accountId: 'work' });
+    }
     assert.equal(q.state, 'ok');
+    assert.equal(q.refreshing, false);
     assert.equal(q.windows[0].remainingPercent, 80);
 
     // Save keepalive settings
@@ -262,6 +270,186 @@ test('readCliCredentials falls back to the default server for an unsafe api_serv
     const cred = await readCliCredentials(file);
     assert.equal(cred.key, 'cog_cli');
     assert.equal(cred.server, DEFAULT_SERVER);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('DevinController persists per-session fastMode (fastSessions), ignores legacy global fastMode, and decouples readQuota vs pullQuota to quota-cache.json', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'devin-fast-'));
+  try {
+    const statePath = join(dir, 'state.json');
+    let usageCalls = 0;
+    let shouldFail = false;
+    const mockFetch = async (url) => {
+      if (url.endsWith('/GetUserStatus')) {
+        usageCalls++;
+        if (shouldFail) return new Response('upstream error', { status: 502 });
+        return Response.json({
+          userStatus: {
+            email: 'quota@example.com',
+            teamsTier: 'TEAMS_TIER_DEVIN_PRO',
+            planStatus: {
+              planInfo: { billingStrategy: 'BILLING_STRATEGY_QUOTA' },
+              dailyQuotaRemainingPercent: 64,
+              dailyQuotaResetAtUnix: Math.floor(Date.now() / 1000) + 3600
+            }
+          }
+        });
+      }
+      return new Response('not found', { status: 404 });
+    };
+
+    const controller = new DevinController({
+      statePath,
+      fetchImpl: mockFetch,
+      readGrant: async () => ({ key: 'cog_test_key' }),
+      writeGrant: async () => {},
+      deleteGrant: async () => {}
+    });
+    await controller.store.load();
+    await controller.store.mutate(revision(controller.store.current), (s) => {
+      s.accounts.push({ id: 'a1', label: 'A1', authMode: 'api-key', credentialStored: true });
+      s.activeAccountId = 'a1';
+      return s;
+    });
+
+    // 1) 按会话单独开启快速模式，会话间严格隔离
+    const r0 = await controller.invoke({ op: 'read', sessionId: 'sess-a' });
+    assert.equal(r0.fastMode, false);
+    assert.equal(r0.fastSessionsCount, 0);
+    assert.equal(r0.fastModels['swe-2']?.tier, 'lightning');
+    assert.equal(r0.quotas.a1?.state, 'idle');
+    assert.equal(usageCalls, 0); // read() 绝不触发上游额度请求
+
+    const r1 = await controller.invoke({ op: 'setFastMode', sessionId: 'sess-a', enabled: true });
+    assert.equal(r1.fastMode, true);
+    assert.equal(r1.fastSessionsCount, 1);
+    const r1b = await controller.invoke({ op: 'read', sessionId: 'sess-b' });
+    assert.equal(r1b.fastMode, false); // sess-b 保持关闭
+
+    const reloaded = new StateStore(statePath);
+    await reloaded.load();
+    assert.equal(reloaded.current.fastSessions['sess-a'], true);
+    assert.equal(reloaded.current.fastSessions['sess-b'], undefined);
+
+    // 2) readQuota 纯读绝不打网络；pullQuota 后台拉取并落盘 quota-cache.json
+    const qIdle = await controller.invoke({ op: 'readQuota', accountId: 'a1' });
+    assert.equal(qIdle.state, 'idle');
+    assert.equal(usageCalls, 0);
+
+    let q = await controller.invoke({ op: 'pullQuota', accountId: 'a1', force: true });
+    const deadline = Date.now() + 2000;
+    while (q.refreshing && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10));
+      q = await controller.invoke({ op: 'readQuota', accountId: 'a1' });
+    }
+    assert.equal(q.state, 'ok');
+    assert.equal(q.windows[0].remainingPercent, 64);
+    assert.equal(usageCalls, 1);
+    controller.dispose();
+
+    // 3) 重启新实例无需再请求网络即可直接读到磁盘持久化额度；故障时保留上次有效缓存并标 stale
+    const controller2 = new DevinController({
+      statePath,
+      fetchImpl: mockFetch,
+      readGrant: async () => ({ key: 'cog_test_key' }),
+      writeGrant: async () => {},
+      deleteGrant: async () => {}
+    });
+    await controller2.store.load();
+    const afterRestart = await controller2.invoke({ op: 'read', sessionId: 'sess-a' });
+    assert.equal(afterRestart.fastMode, true);
+    assert.equal(afterRestart.quotas.a1?.state, 'ok');
+    assert.equal(afterRestart.quotas.a1?.windows[0].remainingPercent, 64);
+    assert.equal(usageCalls, 1);
+
+    shouldFail = true;
+    let qErr = await controller2.invoke({ op: 'pullQuota', accountId: 'a1', force: true });
+    const dl2 = Date.now() + 2000;
+    while (qErr.refreshing && Date.now() < dl2) {
+      await new Promise((r) => setTimeout(r, 10));
+      qErr = await controller2.invoke({ op: 'readQuota', accountId: 'a1' });
+    }
+    assert.equal(qErr.state, 'ok');
+    assert.equal(qErr.stale, true);
+    assert.equal(qErr.windows[0].remainingPercent, 64);
+
+    // 4) clearAll 关闭全部会话快速模式
+    const rCleared = await controller2.invoke({ op: 'setFastMode', clearAll: true });
+    assert.equal(rCleared.fastSessionsCount, 0);
+    assert.equal((await controller2.invoke({ op: 'read', sessionId: 'sess-a' })).fastMode, false);
+    controller2.dispose();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('DevinController 拉取 RPC 目录后用 CLI 补全官方 Fusion 组合表', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'devin-fusion-routes-'));
+  try {
+    const statePath = join(dir, 'state.json');
+    const fakeCli = join(dir, 'devin.exe');
+    await writeFile(fakeCli, '');
+    const grants = new Map();
+    const routes = [
+      'fusion-claude-opus-5-5-medium-sidekick-swe-2-medium',
+      'fusion-claude-opus-5-5-medium-fast-sidekick-swe-2-medium',
+      'fusion-claude-fable-5-2-high-sidekick-gpt-6-luna-high',
+      'fusion-claude-fable-5-2-high-fast-sidekick-gpt-6-luna-high-priority'
+    ];
+    const modelMsg = new PB()
+      .str(1, 'SWE-2 High')
+      .str(22, 'swe-2-high')
+      .varint(18, 262000)
+      .bytes(23, new PB().varint(13, 128000).str(23, 'swe-2').done())
+      .varint(5, 1)
+      .done();
+    const proto = new PB().bytes(1, modelMsg).done();
+    const mockFetch = async (url) => {
+      if (url.endsWith('/GetUserStatus')) {
+        return Response.json({
+          userStatus: {
+            email: 'devin@example.com',
+            teamsTier: 'TEAMS_TIER_DEVIN_PRO',
+            planStatus: { planInfo: { billingStrategy: 'BILLING_STRATEGY_QUOTA' } }
+          }
+        });
+      }
+      if (url.endsWith('/GetCliModelConfigs')) {
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => proto.buffer.slice(proto.byteOffset, proto.byteOffset + proto.byteLength)
+        };
+      }
+      return new Response('not found', { status: 404 });
+    };
+    const controller = new DevinController({
+      statePath,
+      devinCliPath: fakeCli,
+      fetchImpl: mockFetch,
+      readGrant: async (id) => grants.get(id),
+      writeGrant: async (id, val) => { grants.set(id, val); },
+      deleteGrant: async (id) => { grants.delete(id); },
+      // RPC 不含 Fusion 组合表；补全路径只读取 CLI 的 fusionRoutes。
+      cliModelsReader: async () => ({ families: [], freeIds: [], prices: {}, fusionRoutes: routes })
+    });
+    await controller.store.load();
+    const snap = await controller.invoke({
+      op: 'saveAccount',
+      revision: revision(controller.store.current),
+      account: { id: 'work', label: 'Work', authMode: 'api-key' },
+      apiKey: 'cog_test_secret'
+    });
+    const pulled = await controller.invoke({ op: 'models', revision: snap.revision, accountId: 'work' });
+    assert.deepEqual(controller.store.current.catalogs.work.fusionRoutes, routes);
+    const fable = pulled.fusion.options.leads.find((lead) => lead.id === 'claude-fable-5-2');
+    assert.equal(fable.fast, true);
+    assert.deepEqual(fable.fastSidekicks, ['gpt-6-luna']);
+    // 快照只暴露可持久化字段
+    assert.equal(Object.hasOwn(pulled.fusion.config, 'fastAllowed'), false);
+    controller.dispose();
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -8,6 +8,7 @@ export const EXCHANGE_RPC = '/exa.seat_management_pb.SeatManagementService/Excha
 export const USER_STATUS_RPC = '/exa.seat_management_pb.SeatManagementService/GetUserStatus';
 export const MODEL_CONFIGS_RPC = '/exa.api_server_pb.ApiServerService/GetCliModelConfigs';
 export const CHAT_RPC = '/exa.api_server_pb.ApiServerService/GetChatMessage';
+export const ASSIGN_MODEL_RPC = '/exa.api_server_pb.ApiServerService/AssignModel';
 export const CLI_VERSION = '3000.11.3';
 export const GZIP_AT = 8 << 10;
 

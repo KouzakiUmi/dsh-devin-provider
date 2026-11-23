@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.1.3
+
+- 新增 Fusion 路由（`fusion`）：lead + sidekick 组合经 `AssignModel` 分配、服务端编排；设置页与聊天输入区均可调整搭配。
+- 新增 Fusion 快速模式：lead 追加 `-fast`，GPT sidekick 追加 `-priority`；官方组合表不含快速变体时自动降级为标准组合。
+- Fusion 搭配按官方 `devin models list` 组合表过滤：每个 lead 只列出允许的 sidekick，旧配置自动回退到合法组合；拉取模型目录时若 RPC 缺组合表，自动用 `devin models list` 补全。
+- 模型列表隐藏 `-fast` / `-lightning` / `-priority` 变体，统一通过 ⚡ 快速模式按思考档位映射；快速模式按会话独立保存。
+- 额度读取改为缓存快照：设置页立即显示缓存并后台刷新，不再阻塞等待上游。
+
 ## 0.1.2
 
 - 修复：设置变更后，路由错误提示更新为最新具体原因。

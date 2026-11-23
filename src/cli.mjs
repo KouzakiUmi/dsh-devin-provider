@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { DEFAULT_SERVER } from './pb.mjs';
-import { parseFamilies } from './catalog.mjs';
+import { parseCliCatalog, parseFamilies } from './catalog.mjs';
 
 function isFile(p) {
   try {
@@ -169,6 +169,13 @@ export async function cliModels(home, opts) {
   const families = parseFamilies(out);
   if (!families.length) throw new Error('devin models list 未返回模型');
   return families;
+}
+
+export async function cliCatalog(home, opts) {
+  const { out } = await runCLI(home, ['models', 'list', '--format', 'json'], opts);
+  const catalog = parseCliCatalog(out);
+  if (!catalog.families.length) throw new Error('devin models list 未返回模型');
+  return catalog;
 }
 
 export async function readCliCredentials(path = cliCredentialsPath()) {

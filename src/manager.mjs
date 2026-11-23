@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DEFAULT_SERVER } from './pb.mjs';
 import {
@@ -8,9 +8,11 @@ import {
   account,
   assertAccountId,
   assertModelId,
+  assertSessionId,
   normalizeIdentity,
   normalizeKeepaliveSettings,
   normalizeModelSettings,
+  normalizeFusionConfig,
   normalizeServerUrl,
   revision
 } from './state.mjs';
@@ -18,10 +20,14 @@ import {
   SNAPSHOT_FAMILIES,
   catalogStatus,
   effectiveModel,
+  fastModelMap,
   fetchCliModelConfigs,
+  fusionConfigOf,
+  fusionOptions,
+  fusionSupportsFast,
   getModelRows
 } from './catalog.mjs';
-import { cliIdentity, cliModels, cliPath, homeFor, readCliCredentials } from './cli.mjs';
+import { cliCatalog, cliIdentity, cliModels, cliPath, homeFor, readCliCredentials } from './cli.mjs';
 import { DevinOAuth } from './oauth.mjs';
 import { fetchUsage, whoByKey } from './quota.mjs';
 import { stopAllKeepalive } from './keepalive.mjs';
@@ -34,6 +40,12 @@ function modelRow(state, accountId, modelId) {
   const row = getModelRows(state, accountId).find((item) => item.id === modelId);
   if (!row) throw new Error('模型不在当前目录中，请先刷新模型目录');
   return row;
+}
+
+// 对外快照只暴露可持久化字段；fastAllowed 是运行时派生值，保存时会被拒绝。
+function publicFusionConfig(state, accountId) {
+  const { fastAllowed, ...config } = fusionConfigOf(state, accountId);
+  return config;
 }
 
 const unknownAccountName = (key, server) =>
@@ -84,9 +96,16 @@ export class DevinController {
         await rm(join(credDir, `${accountId}.json`), { force: true }).catch(() => {});
       });
 
+    this.quotaCachePath = join(dirname(statePath), 'quota-cache.json');
     this.quotaCache = new Map();
     this.quotaInflight = new Map();
+    this.quotaCacheLoaded = false;
+    this.quotaLoadPromise = null;
+    this.quotaWriteQueue = Promise.resolve();
     this.cacheGeneration = 0;
+    this.dataVersion = 0;
+    this.refreshTimer = null;
+    this.startupTimer = null;
     this.oauth = new DevinOAuth({
       fetchImpl,
       onSuccess: (payload) => this.bindOAuthLogin(payload)
@@ -104,10 +123,73 @@ export class DevinController {
     return found;
   }
 
-  clearCaches() {
+  async ensureQuotaCacheLoaded() {
+    if (this.quotaCacheLoaded) return;
+    if (!this.quotaLoadPromise) {
+      this.quotaLoadPromise = (async () => {
+        try {
+          const parsed = JSON.parse(await readFile(this.quotaCachePath, 'utf8'));
+          const entries = parsed?.entries && typeof parsed.entries === 'object' && !Array.isArray(parsed.entries)
+            ? parsed.entries
+            : {};
+          for (const [id, item] of Object.entries(entries)) {
+            if (!id || !item || typeof item !== 'object' || Array.isArray(item)) continue;
+            if (!this.quotaCache.has(id)) {
+              this.quotaCache.set(id, { ...item, accountId: id });
+            }
+          }
+        } catch {}
+        this.quotaCacheLoaded = true;
+      })();
+    }
+    await this.quotaLoadPromise;
+  }
+
+  persistQuotaCache() {
+    if (this.disposed) return Promise.resolve();
+    const snapshot = {
+      version: 1,
+      entries: Object.fromEntries(
+        [...this.quotaCache.entries()].map(([id, entry]) => [id, structuredClone(entry)])
+      )
+    };
+    const task = this.quotaWriteQueue.then(async () => {
+      if (this.disposed) return;
+      await mkdir(dirname(this.quotaCachePath), { recursive: true, mode: 0o700 });
+      if (this.disposed) return;
+      const tmp = `${this.quotaCachePath}.${process.pid}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(tmp, JSON.stringify(snapshot, null, 2) + '\n', { mode: 0o600 });
+        if (this.disposed) {
+          await rm(tmp, { force: true }).catch(() => {});
+          return;
+        }
+        await rename(tmp, this.quotaCachePath);
+      } catch (err) {
+        await rm(tmp, { force: true }).catch(() => {});
+        throw err;
+      }
+    });
+    this.quotaWriteQueue = task.catch(() => {});
+    return task;
+  }
+
+  clearCaches(accountId = null, { persist = true } = {}) {
     this.cacheGeneration++;
-    this.quotaCache.clear();
-    this.quotaInflight.clear();
+    let changed = false;
+    if (accountId) {
+      changed = this.quotaCache.delete(accountId);
+      this.quotaInflight.delete(accountId);
+    } else {
+      changed = this.quotaCache.size > 0;
+      this.quotaCache.clear();
+      this.quotaInflight.clear();
+    }
+    if (changed && persist && !this.disposed) {
+      this.quotaCacheLoaded = true;
+      return this.persistQuotaCache().catch(() => {});
+    }
+    return Promise.resolve();
   }
 
   serverFor(owner) {
@@ -184,7 +266,7 @@ export class DevinController {
       else delete next.catalogs[accountId];
       return next;
     }, { signal });
-    this.clearCaches();
+    await this.clearCaches(accountId);
     try {
       await this.onChange();
     } catch {
@@ -192,9 +274,33 @@ export class DevinController {
     }
   }
 
-  async read() {
+  quotaSnapshotFor(accountId) {
+    const entry = this.quotaCache.get(accountId);
+    const refreshing = this.quotaInflight.has(accountId);
+    if (!entry) {
+      return {
+        accountId,
+        state: refreshing ? 'loading' : 'idle',
+        windows: [],
+        refreshing,
+        stale: false,
+        updatedAt: null
+      };
+    }
+    const { credHash: _ignored, ...publicEntry } = entry;
+    const ttl = publicEntry.state === 'ok' ? 60_000 : 15_000;
+    const fresh = typeof publicEntry.fetchedAt === 'number' && Date.now() - publicEntry.fetchedAt < ttl;
+    return {
+      ...structuredClone(publicEntry),
+      refreshing,
+      stale: Boolean(publicEntry.stale) || !fresh
+    };
+  }
+
+  async read(sessionId = '') {
     const state = this.store.current;
     if (!state) throw new Error(this.routingError || '无法读取 Devin 账号元数据；原文件未覆盖');
+    await this.ensureQuotaCacheLoaded();
 
     const accounts = await Promise.all(
       state.accounts.map(async (owner) => {
@@ -215,6 +321,9 @@ export class DevinController {
         };
       })
     );
+
+    const activeStatus = catalogStatus(state, state.activeAccountId);
+    const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
 
     return {
       revision: revision(state),
@@ -238,103 +347,223 @@ export class DevinController {
           models
         };
       }),
+      quotas: Object.fromEntries(state.accounts.map((a) => [a.id, this.quotaSnapshotFor(a.id)])),
+      fastMode: Boolean(sid && state.fastSessions?.[sid]),
+      fastSessionsCount: Object.keys(state.fastSessions ?? {}).length,
+      fastModels: activeStatus.broken
+        ? {}
+        : fastModelMap(activeStatus.families, { fusionFast: fusionSupportsFast(state, state.activeAccountId) }),
+      fusion: {
+        config: publicFusionConfig(state, state.activeAccountId),
+        options: fusionOptions(state, state.activeAccountId),
+        perAccount: Object.fromEntries(state.accounts.map((a) => [a.id, publicFusionConfig(state, a.id)]))
+      },
       login: this.oauth.status()
     };
   }
 
-  async quota(accountId, force = false) {
-    const owner = this.owner(accountId);
-    const key = `${accountId}:${revision(owner)}`;
-    if (force) this.quotaCache.delete(key);
-    const cached = this.quotaCache.get(key);
-    if (!force && cached && Date.now() - cached.at < 60_000) return structuredClone(cached.value);
-    if (this.quotaInflight.has(key)) return this.quotaInflight.get(key);
+  // 中间持久化层纯读路径：仅从内存/磁盘缓存返回快照，绝不触发网络或阻塞在写队列上。
+  async readQuota(accountId) {
+    this.owner(accountId);
+    await this.ensureQuotaCacheLoaded();
+    return this.quotaSnapshotFor(accountId);
+  }
 
+  // 拉取与读取解耦：触发后台刷新并立即返回当前持久快照（attach refreshing: true），不卡死 UI。
+  async pullQuota(accountId, force = true) {
+    this.owner(accountId);
+    await this.ensureQuotaCacheLoaded();
+    const current = this.quotaSnapshotFor(accountId);
+    if (force || current.state === 'idle' || current.stale) {
+      this.startQuotaRefresh(accountId).catch(() => {});
+    }
+    return this.quotaSnapshotFor(accountId);
+  }
+
+  quota(accountId, force = false) {
+    return this.pullQuota(accountId, force);
+  }
+
+  // 中间层后台刷新路径：并发获取用量与免费清单、写入持久化文件并支持故障时保留上次有效读数（inflight 去重）。
+  startQuotaRefresh(accountId) {
+    if (this.disposed) return Promise.resolve();
+    if (this.quotaInflight.has(accountId)) return this.quotaInflight.get(accountId);
+    const owner = this.owner(accountId);
     const generation = this.cacheGeneration;
     const task = (async () => {
-      await Promise.resolve();
-      const base = { accountId, updatedAt: new Date().toISOString() };
+      await this.ensureQuotaCacheLoaded();
+      const now = Date.now();
+      const base = { accountId, fetchedAt: now, updatedAt: new Date(now).toISOString() };
+      const prev = this.quotaCache.get(accountId);
+      let value;
       try {
         const cred = await this.resolveCredential(owner);
         if (!cred?.key) {
-          return { ...base, state: 'no-key', windows: [], error: '该账号尚未配置可用凭据，请先登录或填写 API Key。' };
-        }
-        let freeIds = [];
-        let configError = '';
-        try {
-          const cfgs = await fetchCliModelConfigs(cred.key, cred.server, this.fetchImpl, this.life.signal);
-          freeIds = cfgs.freeIds ?? [];
-        } catch (err) {
-          configError = err instanceof Error ? err.message : String(err);
-        }
-        const usage = await fetchUsage(cred.key, cred.server, {
-          fetchImpl: this.fetchImpl,
-          signal: this.life.signal,
-          freeIds,
-          configError
-        });
-        if (usage.expired) {
-          return { ...base, state: 'expired', windows: [], error: usage.error };
-        }
-        if (usage.error) {
-          return { ...base, state: 'error', windows: [], error: usage.error };
-        }
-        if (usage.identity && !this.disposed) {
-          // Silently refresh cached non-secret identity metadata if changed
-          const nextId = normalizeIdentity(usage.identity);
-          if (JSON.stringify(nextId) !== JSON.stringify(owner.identity ?? {})) {
-            await this.store
-              .mutate(revision(this.store.current), (next) => {
-                const idx = next.accounts.findIndex((a) => a.id === accountId);
-                if (idx >= 0) next.accounts[idx] = account({ ...next.accounts[idx], identity: nextId });
-                return next;
-              })
-              .catch(() => {});
+          value = { ...base, state: 'no-key', windows: [], error: '该账号尚未配置可用凭据，请先登录或填写 API Key。' };
+        } else {
+          const credHash = createHash('sha256').update(cred.server || '').update('\0').update(cred.key).digest('hex').slice(0, 16);
+          const hasCachedCatalog = Boolean(this.store.current?.catalogs?.[accountId]);
+          const cachedStatus = catalogStatus(this.store.current, accountId);
+          const usagePromise = fetchUsage(cred.key, cred.server, {
+            fetchImpl: this.fetchImpl,
+            signal: this.life.signal
+          });
+          const cfgPromise = hasCachedCatalog
+            ? Promise.resolve({ freeIds: cachedStatus.freeIds ?? [], configError: '' })
+            : fetchCliModelConfigs(cred.key, cred.server, this.fetchImpl, this.life.signal)
+                .then((cfgs) => ({ freeIds: cfgs.freeIds ?? [], configError: '' }))
+                .catch((err) => ({ freeIds: cachedStatus.freeIds ?? [], configError: err instanceof Error ? err.message : String(err) }));
+          const [usageRes, cfgRes] = await Promise.all([usagePromise, cfgPromise]);
+          const freeIds = cfgRes.freeIds ?? [];
+          const configError = cfgRes.configError ?? '';
+          const mergedUsage =
+            freeIds.length || configError
+              ? {
+                  ...usageRes,
+                  windows: (usageRes.windows ?? []).map((w) =>
+                    w.kind === '1d' || w.kind === '7d'
+                      ? { ...w, ...(freeIds.length ? { notModels: freeIds } : {}) }
+                      : w
+                  ),
+                  ...(freeIds.length ? { freeModels: freeIds } : {}),
+                  ...(configError ? { freeModelsNote: `免费模型清单暂未获取（${configError}）` } : {})
+                }
+              : usageRes;
+
+          if (mergedUsage.expired) {
+            value = { ...base, credHash, state: 'expired', windows: [], error: mergedUsage.error };
+          } else if (mergedUsage.error) {
+            if (prev?.state === 'ok' && prev.credHash === credHash && Array.isArray(prev.windows) && prev.windows.length) {
+              value = {
+                ...prev,
+                fetchedAt: now,
+                stale: true,
+                staleReason: mergedUsage.error
+              };
+            } else {
+              value = { ...base, credHash, state: 'error', windows: [], error: mergedUsage.error };
+            }
+          } else {
+            if (mergedUsage.identity && !this.disposed) {
+              const nextId = normalizeIdentity(mergedUsage.identity);
+              if (JSON.stringify(nextId) !== JSON.stringify(owner.identity ?? {})) {
+                const syncIdentity = this.operations.then(() => {
+                  if (this.disposed || !this.store.current) return undefined;
+                  return this.store.mutate(revision(this.store.current), (next) => {
+                    const idx = next.accounts.findIndex((a) => a.id === accountId);
+                    if (idx >= 0) next.accounts[idx] = account({ ...next.accounts[idx], identity: nextId });
+                    return next;
+                  });
+                });
+                this.operations = syncIdentity.catch(() => {});
+              }
+            }
+            value = { ...base, credHash, state: 'ok', stale: false, ...mergedUsage };
           }
         }
-        const value = { ...base, state: 'ok', ...usage };
-        if (!this.disposed && generation === this.cacheGeneration) {
-          this.quotaCache.set(key, { at: Date.now(), value });
-        }
-        return structuredClone(value);
       } catch (err) {
-        return {
-          ...base,
-          state: 'error',
-          windows: [],
-          error: `额度读取失败：${err instanceof Error ? err.message : String(err)}`
-        };
-      } finally {
-        if (this.quotaInflight.get(key) === task) this.quotaInflight.delete(key);
+        const msg = `额度读取失败：${err instanceof Error ? err.message : String(err)}`;
+        if (prev?.state === 'ok' && Array.isArray(prev.windows) && prev.windows.length) {
+          value = { ...prev, fetchedAt: now, stale: true, staleReason: msg };
+        } else {
+          value = { ...base, state: 'error', windows: [], error: msg };
+        }
       }
+      if (!this.disposed && generation === this.cacheGeneration) {
+        this.quotaCache.set(accountId, value);
+        this.dataVersion++;
+        await this.persistQuotaCache().catch(() => {});
+      }
+      return value;
     })();
+    const tracked = task.finally(() => {
+      if (this.quotaInflight.get(accountId) === tracked) this.quotaInflight.delete(accountId);
+    });
+    this.quotaInflight.set(accountId, tracked);
+    return tracked;
+  }
 
-    this.quotaInflight.set(key, task);
-    return task;
+  // 后台定时保暖：让活跃账号额度缓存与持久化文件常新，UI 只做纯读取，不因打开设置触发阻塞网络请求。
+  startBackgroundRefresh() {
+    if (this.disposed || this.refreshTimer) return;
+    const maybeRefreshActive = async () => {
+      const state = this.store.current;
+      const accountId = state?.activeAccountId;
+      if (this.disposed || !accountId) return;
+      const owner = state.accounts.find((a) => a.id === accountId);
+      if (!owner) return;
+      await this.ensureQuotaCacheLoaded();
+      const snap = this.quotaSnapshotFor(accountId);
+      if (snap.state === 'idle' || snap.stale) {
+        this.startQuotaRefresh(accountId).catch(() => {});
+      }
+    };
+    this.startupTimer = setTimeout(() => {
+      this.startupTimer = null;
+      void maybeRefreshActive();
+    }, 1200);
+    this.startupTimer.unref?.();
+    this.refreshTimer = setInterval(() => {
+      void maybeRefreshActive();
+    }, 30_000);
+    this.refreshTimer.unref?.();
   }
 
   async invoke(request) {
     if (this.disposed) throw new Error('插件已卸载');
     if (!request || typeof request !== 'object') throw new Error('请求格式错误');
     const { op } = request;
+    const sid = typeof request.sessionId === 'string' ? request.sessionId.trim() : '';
     if (op === 'read') {
       const read = this.operations.then(async () => {
         if (await this.store.refresh()) {
-          this.clearCaches();
           try {
             await this.onChange();
           } catch {
             this.routingError ??= '模型路由更新失败；设置已同步，实际路由仍为此前账号。';
           }
         }
-        return this.read();
+        return this.read(sid);
       });
       this.operations = read.catch(() => {});
       return read;
     }
     if (op === 'loginStatus') return this.oauth.status();
     if (op === 'cancelLogin') return this.oauth.cancel(request.jobId);
+    if (op === 'readQuota') return this.readQuota(request.accountId);
+    if (op === 'pullQuota') return this.pullQuota(request.accountId, request.force !== false);
     if (op === 'quota') return this.quota(request.accountId, request.force === true);
+    if (op === 'setFastMode') {
+      const nextOp = this.operations.then(async () => {
+        if (this.disposed) throw new Error('插件已卸载');
+        await this.store.refresh().catch(() => {});
+        const clearAll = request.clearAll === true;
+        const targetSid = clearAll ? '' : assertSessionId(sid);
+        if (!clearAll && typeof request.enabled !== 'boolean') {
+          throw new Error('快速模式开关必须是布尔值');
+        }
+        await this.store.mutate(revision(this.store.current), (next) => {
+          next.fastSessions ??= {};
+          if (clearAll) {
+            next.fastSessions = {};
+          } else if (request.enabled) {
+            // 维持最近使用上限：重新插入放到末尾并裁剪至上限内
+            delete next.fastSessions[targetSid];
+            next.fastSessions[targetSid] = true;
+            const keys = Object.keys(next.fastSessions);
+            if (keys.length > 500) {
+              for (let i = 0; i < keys.length - 500; i++) delete next.fastSessions[keys[i]];
+            }
+          } else {
+            delete next.fastSessions[targetSid];
+          }
+          return next;
+        });
+        return this.read(targetSid);
+      });
+      this.operations = nextOp.catch(() => {});
+      return nextOp;
+    }
 
     const next = this.operations.then(() => this.change(request));
     this.operations = next.catch(() => {});
@@ -384,7 +613,7 @@ export class DevinController {
         if (catalog) next.catalogs[targetId] = catalog;
         return next;
       });
-      this.clearCaches();
+      await this.clearCaches(targetId);
       try {
         await this.onChange();
       } catch {
@@ -399,7 +628,10 @@ export class DevinController {
       const plaintextKey = typeof request.apiKey === 'string' ? request.apiKey.trim() : '';
       let identity = input.identity;
       let identityVerified = this.store.current?.accounts?.find((a) => a.id === input.id)?.identityVerified;
+      const existingAcc = this.store.current?.accounts?.find((a) => a.id === input.id);
       const candidateServer = this.serverFor({ server: normalizeServerUrl(input.server) });
+      const serverChanged = existingAcc && (existingAcc.server ?? '') !== normalizeServerUrl(input.server);
+      const credChanged = Boolean(plaintextKey) || serverChanged || (existingAcc && existingAcc.authMode !== (input.authMode ?? 'reference'));
       if (input.authMode === 'api-key') {
         if (!plaintextKey) {
           const existing = await this.readGrant(input.id).catch(() => undefined);
@@ -424,7 +656,7 @@ export class DevinController {
         if (!next.activeAccountId) next.activeAccountId = entry.id;
         return next;
       });
-      this.clearCaches();
+      if (credChanged) await this.clearCaches(input.id);
       try {
         await this.onChange();
       } catch {
@@ -444,12 +676,19 @@ export class DevinController {
         if (cliPath(this.devinCliPath)) {
           try {
             const home = await homeFor(cred.key, cred.server, join(dirname(this.store.path), 'cli-cache'));
-            const families = await this.cliModelsReader(home, { executable: this.devinCliPath, signal: this.life.signal });
+            const cliResult = this.cliModelsReader === cliModels
+              ? await cliCatalog(home, { executable: this.devinCliPath, signal: this.life.signal })
+              : await this.cliModelsReader(home, { executable: this.devinCliPath, signal: this.life.signal });
+            const families = Array.isArray(cliResult) ? cliResult : (cliResult?.families ?? []);
+            const cliFree = Array.isArray(cliResult) ? [] : (cliResult?.freeIds ?? []);
+            const cliPrices = Array.isArray(cliResult) ? {} : (cliResult?.prices ?? {});
+            const cliFusion = Array.isArray(cliResult) ? [] : (cliResult?.fusionRoutes ?? []);
             catalog = {
               families,
               images: {},
-              freeIds: [],
-              prices: {},
+              freeIds: cliFree,
+              prices: cliPrices,
+              ...(cliFusion.length ? { fusionRoutes: cliFusion } : {}),
               source: 'cli',
               updatedAt: new Date().toISOString()
             };
@@ -458,6 +697,22 @@ export class DevinController {
           }
         } else {
           throw err;
+        }
+      }
+      // GetCliModelConfigs 不含 Fusion 组合路由；官方组合表只出现在 `devin models list` 中。
+      // RPC 目录未带组合表时补一次 CLI 读取；CLI 不可用时保留 RPC 目录，Fusion 搭配退回静态表。
+      if (!Array.isArray(catalog.fusionRoutes) || !catalog.fusionRoutes.length) {
+        if (cliPath(this.devinCliPath)) {
+          try {
+            const home = await homeFor(cred.key, cred.server, join(dirname(this.store.path), 'cli-cache'));
+            const cliResult = this.cliModelsReader === cliModels
+              ? await cliCatalog(home, { executable: this.devinCliPath, signal: this.life.signal })
+              : await this.cliModelsReader(home, { executable: this.devinCliPath, signal: this.life.signal });
+            const cliFusion = Array.isArray(cliResult) ? [] : (cliResult?.fusionRoutes ?? []);
+            if (cliFusion.length) catalog = { ...catalog, fusionRoutes: cliFusion };
+          } catch {
+            // 保留主目录；组合校验退回静态表。
+          }
         }
       }
       await this.store.mutate(request.revision, (next) => {
@@ -537,6 +792,11 @@ export class DevinController {
         delete bucket[request.modelId];
         if (Object.keys(bucket).length) next.modelSettings[accountId] = bucket;
         else delete next.modelSettings[accountId];
+      } else if (op === 'saveFusion') {
+        this.owner(accountId);
+        const config = normalizeFusionConfig(request.config ?? {});
+        if (Object.keys(config).length) next.fusion[accountId] = config;
+        else delete next.fusion[accountId];
       } else {
         throw new Error(`未知操作：${op}`);
       }
@@ -545,8 +805,8 @@ export class DevinController {
 
     if (op === 'removeAccount') {
       await this.deleteGrant(accountId).catch(() => {});
+      await this.clearCaches(accountId);
     }
-    this.clearCaches();
     try {
       await this.onChange();
     } catch {
@@ -564,9 +824,13 @@ export class DevinController {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.startupTimer) clearTimeout(this.startupTimer);
+    this.startupTimer = null;
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    this.refreshTimer = null;
     this.life.abort();
     this.oauth.dispose();
     stopAllKeepalive();
-    this.clearCaches();
+    this.clearCaches(null, { persist: false });
   }
 }
