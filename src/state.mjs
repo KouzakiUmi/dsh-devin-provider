@@ -294,7 +294,8 @@ export function initialState() {
     enabled: true,
     settings: {
       cacheKeepalive: { enabled: false, intervalSec: 285, maxPings: 6 },
-      serverUrl: ''
+      serverUrl: '',
+      hideLegacyModels: true
     },
     catalogs: {},
     modelSettings: {},
@@ -316,9 +317,12 @@ export function validateState(value) {
   const enabled = value.enabled === undefined ? true : value.enabled;
   if (typeof enabled !== 'boolean') throw new Error('Provider 启用状态必须是布尔值');
   const rawSettings = value.settings && typeof value.settings === 'object' && !Array.isArray(value.settings) ? value.settings : {};
+  const hideLegacyModels = rawSettings.hideLegacyModels === undefined ? true : rawSettings.hideLegacyModels;
+  if (typeof hideLegacyModels !== 'boolean') throw new Error('过滤老旧模型开关必须是布尔值');
   const settings = {
     cacheKeepalive: normalizeKeepaliveSettings(rawSettings.cacheKeepalive),
-    serverUrl: normalizeServerUrl(rawSettings.serverUrl)
+    serverUrl: normalizeServerUrl(rawSettings.serverUrl),
+    hideLegacyModels
   };
   const catalogs = {};
   if (value.catalogs && typeof value.catalogs === 'object' && !Array.isArray(value.catalogs)) {

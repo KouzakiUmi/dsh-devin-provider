@@ -6,6 +6,7 @@ import {
   SNAPSHOT_FREE,
   SNAPSHOT_IMAGES,
   SNAPSHOT_PRICES,
+  SNAPSHOT_RECOMMENDED,
   effectiveModel,
   fastModelMap,
   getModelRows,
@@ -18,12 +19,20 @@ import {
   parseFree,
   parseModelConfigs,
   parsePrices,
+  parseRecommended,
   profileFor,
   variantFor
 } from '../src/catalog.mjs';
 import { initialState } from '../src/state.mjs';
 
 test('variantFor resolves family id, DSH off->none, nearest effort, and fast tier', () => {
+  // SWE-2.1（最新主力：5 档标准免费 + 5 档 lightning 快速）
+  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2-1', undefined), 'swe-2-1-medium');
+  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2-1', 'low'), 'swe-2-1-low');
+  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2-1', 'xhigh'), 'swe-2-1-xhigh');
+  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2-1', 'high', { fast: true }), 'swe-2-1-high-lightning');
+  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2-1', undefined, { fast: true }), 'swe-2-1-medium-lightning');
+
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2', undefined), 'swe-2-high');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2', 'medium'), 'swe-2-medium');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2', 'low'), 'swe-2-medium');
@@ -31,27 +40,40 @@ test('variantFor resolves family id, DSH off->none, nearest effort, and fast tie
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'gpt-6-sol', 'off'), 'gpt-6-sol-none');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'claude-opus-5-5-fast', 'xhigh'), 'claude-opus-5-5-xhigh-fast');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'glm-5-2-1m', undefined), 'glm-5-2-1m');
-  // 快速模式（Lightning / Fast / Priority）按思考深度映射（含独立快速家族 swe-1.7-lightning / swe-1.6-fast）
+  // 快速模式（Lightning / Fast / Priority）按思考深度映射
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2', 'high', { fast: true }), 'swe-2-high-lightning');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2', 'low', { fast: true }), 'swe-2-medium-lightning');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-2-flash', 'max', { fast: true }), 'swe-2-flash-max-lightning');
-  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-1.7', 'medium', { fast: true }), 'swe-1-7-lightning-medium');
-  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-1.7', 'high', { fast: true }), 'swe-1-7-lightning');
-  assert.equal(variantFor(SNAPSHOT_FAMILIES, 'swe-1.6', 'high', { fast: true }), 'swe-1-6-fast');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'claude-opus-5-5', 'medium', { fast: true }), 'claude-opus-5-5-medium-fast');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'gpt-6-astra', 'high', { fast: true }), 'gpt-6-astra-high-priority');
   assert.equal(variantFor(SNAPSHOT_FAMILIES, 'kimi-k3', 'high', { fast: true }), 'kimi-k3-high');
 
+  // 独立 sibling 快速家族折叠（如 swe-1.7 + swe-1.7-lightning / swe-1.6 + swe-1.6-fast）
+  const siblingFamilies = [
+    { uid: 'swe-1.7', label: 'SWE-1.7', aliases: [], models: [{ id: 'swe-1-7', name: 'SWE-1.7 Max', context: 262000, output: 128000 }, { id: 'swe-1-7-medium', name: 'SWE-1.7 Medium', context: 262000, output: 128000 }] },
+    { uid: 'swe-1.7-lightning', label: 'SWE-1.7 Lightning', aliases: [], models: [{ id: 'swe-1-7-lightning', name: 'SWE-1.7 Lightning Max', context: 202752, output: 96000 }, { id: 'swe-1-7-lightning-medium', name: 'SWE-1.7 Lightning Medium', context: 202752, output: 96000 }] },
+    { uid: 'swe-1.6', label: 'SWE-1.6', aliases: [], models: [{ id: 'swe-1-6', name: 'SWE-1.6', context: 200000, output: 128000 }] },
+    { uid: 'swe-1.6-fast', label: 'SWE-1.6 Fast', aliases: [], models: [{ id: 'swe-1-6-fast', name: 'SWE-1.6 Fast', context: 200000, output: 128000 }] }
+  ];
+  assert.equal(variantFor(siblingFamilies, 'swe-1.7', 'medium', { fast: true }), 'swe-1-7-lightning-medium');
+  assert.equal(variantFor(siblingFamilies, 'swe-1.7', 'high', { fast: true }), 'swe-1-7-lightning');
+  assert.equal(variantFor(siblingFamilies, 'swe-1.6', 'high', { fast: true }), 'swe-1-6-fast');
+  assert.equal(fastModelMap(siblingFamilies)['swe-1.7']?.tier, 'lightning');
+
   const fastMap = fastModelMap(SNAPSHOT_FAMILIES, { fusionFast: true });
+  assert.equal(fastMap['swe-2-1']?.tier, 'lightning');
+  assert.deepEqual(fastMap['swe-2-1']?.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.equal(fastMap['swe-2']?.tier, 'lightning');
   assert.equal(fastMap['swe-2']?.label, 'Lightning');
   assert.equal(fastMap['swe-2-flash']?.tier, 'lightning');
-  assert.equal(fastMap['swe-1.7']?.tier, 'lightning');
   assert.equal(fastMap['claude-opus-5-5']?.tier, 'fast');
   assert.equal(fastMap['gpt-6-astra']?.tier, 'priority');
   assert.equal(fastMap.fusion?.tier, 'fast');
   assert.equal(fastMap['kimi-k3'], undefined);
+  assert.equal(SNAPSHOT_FREE.includes('swe-2-1-medium'), true);
   assert.equal(SNAPSHOT_FREE.includes('swe-2-high'), true);
+  assert.equal(SNAPSHOT_RECOMMENDED.includes('swe-2-1'), true);
+  assert.equal(SNAPSHOT_PRICES['swe-2-1-medium-lightning']?.output, 25);
   assert.equal(SNAPSHOT_PRICES['swe-2-medium-lightning']?.output, 5);
 });
 
@@ -122,6 +144,7 @@ test('protobuf GetCliModelConfigs parsers read images, free tier, prices, and fa
   const cfg1 = new PB()
     .str(1, 'SWE-2 High')
     .varint(5, 1)
+    .varint(11, 1)
     .varint(18, 262000)
     .str(22, 'swe-2-high')
     .bytes(23, new PB().varint(13, 128000).str(23, 'swe-2'))
@@ -141,6 +164,7 @@ test('protobuf GetCliModelConfigs parsers read images, free tier, prices, and fa
   const buf = new PB().bytes(1, cfg1).bytes(1, cfg2).done();
   assert.deepEqual(parseModelConfigs(buf), { 'swe-2-high': true, 'custom-high': false });
   assert.deepEqual([...parseFree(buf)], ['swe-2-high']);
+  assert.deepEqual([...parseRecommended(buf)], ['swe-2']);
   const prices = parsePrices(buf);
   assert.equal(prices.get('custom-high')?.input, 3.5);
   const fams = parseConfigFamilies(buf);
@@ -215,4 +239,57 @@ test('per-model defaults, overrides, and profileFor filtering', () => {
   const eff = effectiveModel(d, { maxTokens: 8000 });
   assert.equal(eff.maxTokens, 8000);
   assert.equal(eff.imageInput, true);
+});
+
+test('getModelRows sorts enabled models first and marks legacy models; profileFor filters legacy models by default', () => {
+  const state = initialState();
+  assert.equal(state.settings.hideLegacyModels, true);
+  state.accounts.push({ id: 'a1', label: 'Main', authMode: 'api-key', credentialStored: true });
+  state.activeAccountId = 'a1';
+  // 停用排在首位的 swe-2-1 与 claude-opus-5-5，验证已启用模型稳定排在前面、停用模型沉到后面
+  state.modelSettings.a1 = {
+    'swe-2-1': { enabled: false },
+    'claude-opus-5-5': { enabled: false }
+  };
+
+  const rows = getModelRows(state, 'a1');
+  const firstDisabledIdx = rows.findIndex((r) => !r.enabled);
+  assert.ok(firstDisabledIdx > 0, '已启用模型应排在前面');
+  assert.equal(rows.slice(0, firstDisabledIdx).every((r) => r.enabled), true);
+  assert.equal(rows.slice(firstDisabledIdx).every((r) => !r.enabled), true);
+  assert.deepEqual(rows.slice(firstDisabledIdx).map((r) => r.id), ['swe-2-1', 'claude-opus-5-5']);
+
+  // 推荐模型 legacy === false，老旧模型 legacy === true
+  assert.equal(rows.find((r) => r.id === 'swe-2-1')?.legacy, false);
+  assert.equal(rows.find((r) => r.id === 'swe-2')?.legacy, false);
+  assert.equal(rows.find((r) => r.id === 'claude-opus-4.6')?.legacy, true);
+  assert.equal(rows.find((r) => r.id === 'gpt-5.4')?.legacy, true);
+  assert.equal(rows.find((r) => r.id === 'swe-1.7')?.legacy, true);
+
+  // 默认 hideLegacyModels = true：profileFor 过滤老旧模型，保留当前推荐模型 + fusion
+  const filteredProfile = profileFor(state);
+  assert.equal(filteredProfile.models.some((m) => m.id === 'swe-2'), true);
+  assert.equal(filteredProfile.models.some((m) => m.id === 'fusion'), true);
+  assert.equal(filteredProfile.models.some((m) => m.id === 'swe-2-1'), false); // 已停用
+  assert.equal(filteredProfile.models.some((m) => m.id === 'claude-opus-4.6'), false);
+  assert.equal(filteredProfile.models.some((m) => m.id === 'gpt-5.4'), false);
+
+  // 关闭过滤后，已启用的老旧模型进入 profileFor
+  state.settings.hideLegacyModels = false;
+  const fullProfile = profileFor(state);
+  assert.equal(fullProfile.models.some((m) => m.id === 'claude-opus-4.6'), true);
+  assert.equal(fullProfile.models.some((m) => m.id === 'gpt-5.4'), true);
+  assert.equal(fullProfile.models.some((m) => m.id === 'swe-2-1'), false);
+
+  // 自定义目录无任何推荐命中时不误清空列表
+  state.settings.hideLegacyModels = true;
+  state.catalogs.a1 = {
+    source: 'remote',
+    families: [{ uid: 'private-model', label: 'Private', aliases: [], models: [{ id: 'private-model', name: 'Private', context: 128000, output: 16000 }] }],
+    images: {},
+    freeIds: [],
+    prices: {}
+  };
+  const customProfile = profileFor(state);
+  assert.equal(customProfile.models.some((m) => m.id === 'private-model'), true);
 });

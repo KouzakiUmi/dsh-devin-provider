@@ -7,8 +7,9 @@ export function captureModelDefaults(state) {
   const defaults = new Map();
   if (state.enabled === false || !state.activeAccountId) return defaults;
   if (!state.accounts.some((a) => a.id === state.activeAccountId)) return defaults;
+  const hideLegacy = state.settings?.hideLegacyModels !== false;
   for (const row of getModelRows(state, state.activeAccountId)) {
-    if (!row.enabled) continue;
+    if (!row.enabled || (hideLegacy && row.legacy)) continue;
     const value = {};
     if (row.effective.temperature !== undefined) value.temperature = row.effective.temperature;
     if (row.effective.defaultReasoning != null) value.reasoningEffort = row.effective.defaultReasoning;

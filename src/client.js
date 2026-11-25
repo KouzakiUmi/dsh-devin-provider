@@ -207,6 +207,11 @@ const CLIENT_STYLES = `
 .ddp-model-tag[data-tone=warn]{color:var(--ddp-warn-text);background:color-mix(in srgb,var(--ddp-warn) 14%,transparent);opacity:1}
 .ddp-model-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto}.ddp-model-actions .ddp-button{min-height:24px;padding:2px 9px;font-size:12px}
 .ddp-model-id{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:11px;opacity:.56}
+.ddp-model-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ddp-model-toolbar input[type=search]{flex:1 1 220px;min-width:0}
+.ddp-model-filter-toggle{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:4px 10px;border-radius:8px;border:1px solid var(--ddp-line-strong);background:var(--ddp-surface);font-size:12px;font-weight:500;white-space:nowrap;cursor:pointer}
+.ddp-model-filter-toggle[data-active=true]{border-color:color-mix(in srgb,var(--ddp-accent) 45%,transparent);background:color-mix(in srgb,var(--ddp-accent) 10%,transparent)}
+.ddp-model-filter-meta{font-size:11px;opacity:.68}
 .ddp-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .ddp-editor{flex-basis:100%;display:flex;flex-direction:column;gap:10px;padding:10px 0 2px 12px;margin-top:4px;border-top:1px dashed var(--ddp-line);border-left:2px solid color-mix(in srgb,var(--ddp-accent) 55%,transparent)}
 .ddp-confirm,.ddp-login-status{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ddp-warn) 28%,transparent);background:color-mix(in srgb,var(--ddp-warn) 9%,transparent)}
@@ -387,6 +392,7 @@ function busyMessage(key) {
     provider: '正在更新 Devin Provider 启用状态…',
     settings: '正在保存缓存保活与服务设置…',
     models: '正在拉取 Devin 模型列表…',
+    'legacy-filter': '正在更新老旧模型过滤设置…',
     model: `正在更新模型 ${arg || ''} 启用状态…`,
     'model-settings': `正在保存模型 ${arg || ''} 参数…`,
     'model-reset': `正在恢复模型 ${arg || ''} 默认参数…`,
@@ -814,6 +820,7 @@ function ModelRow({ model, disabled, editor, draftError, fieldErrors, onToggle, 
         model?.free
           ? h(ModelTag, { tone: 'success' }, '免费')
           : model?.mixedFree ? h(ModelTag, null, '部分免费') : null,
+        model?.legacy ? h(ModelTag, null, '老旧') : null,
         hasOverrides ? h(ModelTag, { tone: 'accent' }, '已调参') : null,
         !enabled ? h(ModelTag, { tone: 'warn' }, '已停用') : null),
       h('div', { className: 'ddp-model-id' }, model?.id ?? ''),
@@ -1395,6 +1402,19 @@ function DevinProviderSection({ client }) {
     } catch (e) { await reportError(e, '更新模型开关失败'); }
   });
 
+  const toggleHideLegacy = (enabled) => run('legacy-filter', async () => {
+    try {
+      const value = await client.invoke({ op: 'setHideLegacyModels', revision: snapshot.revision, enabled });
+      applySnapshot(value);
+      setNotice({
+        ok: true,
+        text: enabled
+          ? '已开启老旧模型过滤（仅保留当前主力模型，同步生效于聊天模型列表）。'
+          : '已关闭老旧模型过滤（已显示全部目录模型，同步生效于聊天模型列表）。'
+      });
+    } catch (e) { await reportError(e, '更新老旧模型过滤开关失败'); }
+  });
+
   const saveModelSettings = (model) => {
     const parsed = parseModelSettingsDraft(modelEditor?.draft);
     if (parsed.error) {
@@ -1556,15 +1576,26 @@ function DevinProviderSection({ client }) {
 
   const disabled = busy !== null || loginActive;
   const providerEnabled = snapshot?.enabled !== false;
+  const hideLegacyModels = snapshot?.settings?.hideLegacyModels !== false;
+  const legacyCount = models.filter((m) => m.legacy === true).length;
+  const visibleModels = hideLegacyModels ? models.filter((m) => !m.legacy) : models;
+  const sortedVisibleModels = [
+    ...visibleModels.filter((m) => m.enabled !== false),
+    ...visibleModels.filter((m) => m.enabled === false)
+  ];
+  const enabledVisibleCount = visibleModels.filter((m) => m.enabled !== false).length;
   const filterQ = modelFilter.trim().toLowerCase();
-  const filteredModels = filterQ
-    ? models.filter((m) => m.id.toLowerCase().includes(filterQ) || (m.name && m.name.toLowerCase().includes(filterQ)))
-    : models;
+  const matchesFilter = (m) => m.id.toLowerCase().includes(filterQ) || (m.name && m.name.toLowerCase().includes(filterQ));
+  const filteredModels = filterQ ? sortedVisibleModels.filter(matchesFilter) : sortedVisibleModels;
+  const hiddenLegacyMatches = filterQ && hideLegacyModels
+    ? models.filter((m) => m.legacy === true && matchesFilter(m)).length
+    : 0;
+  const MODEL_PREVIEW_LIMIT = 16;
   const routeTone = !providerEnabled ? 'neutral' : activeAccount?.hasCredential ? 'ok' : 'warn';
   const routeLabel = !providerEnabled ? '路由已停用' : !activeAccount ? '未选择账号' : activeAccount.hasCredential ? `${accountName(activeAccount)} · 已就绪` : `${accountName(activeAccount)} · 缺少凭据`;
   const TABS = [
     { id: 'overview', label: '概览与额度' },
-    { id: 'models', label: `模型与 Fusion (${models.length})` },
+    { id: 'models', label: `模型与 Fusion (${visibleModels.length})` },
     { id: 'accounts', label: `账号与登录 (${snapshot?.accounts?.length ?? 0})` },
     { id: 'advanced', label: '高级设置' }
   ];
@@ -1576,7 +1607,7 @@ function DevinProviderSection({ client }) {
         h('div', { className: 'ddp-subtitle' },
           h('span', { className: 'ddp-dot', 'data-tone': routeTone }),
           h('span', null, routeLabel),
-          snapshot ? h('span', null, `· 已启用 ${models.filter((m) => m.enabled).length}/${models.length} 模型`) : null)),
+          snapshot ? h('span', null, `· 已启用 ${enabledVisibleCount}/${visibleModels.length} 模型`) : null)),
       h('div', { className: 'ddp-actions' },
         snapshot && h('label', { className: 'ddp-toggle' },
           h('input', {
@@ -1660,32 +1691,59 @@ function DevinProviderSection({ client }) {
                 : h('span', { style: style.chip }, '按会话生效'))),
           h('section', { className: 'ddp-group', 'aria-label': '模型目录与参数覆盖' },
             h(SectionHeading, {
-              title: `模型目录（已启用 ${activeCatalog?.enabledCount ?? models.filter((m) => m.enabled).length}/${models.length}）`,
+              title: `模型目录（已启用 ${enabledVisibleCount}/${visibleModels.length}${hideLegacyModels && legacyCount ? ` · 已过滤 ${legacyCount} 个老旧` : ''}）`,
               description: activeCatalog
-                ? `来源：${CATALOG_SOURCE_LABELS[activeCatalog.source] ?? activeCatalog.source}${activeCatalog.updatedAt ? ` · 同步于 ${formatTime(activeCatalog.updatedAt)}` : ''} · 价格单位 $/1M（输入 / 缓存读取 / 输出）`
-                : '按模型家族折叠，已隐藏快速模式变体；支持独立启停及覆盖上下文、输出上限与思考档位（价格单位 $/1M：输入 / 缓存读取 / 输出）。',
+                ? `来源：${CATALOG_SOURCE_LABELS[activeCatalog.source] ?? activeCatalog.source}${activeCatalog.updatedAt ? ` · 同步于 ${formatTime(activeCatalog.updatedAt)}` : ''} · 已启用模型优先排前 · 价格单位 $/1M（输入 / 缓存读取 / 输出）`
+                : '按模型家族折叠，已隐藏快速模式变体且已启用模型排前；支持独立启停及覆盖上下文、输出上限与思考档位（价格单位 $/1M：输入 / 缓存读取 / 输出）。',
               action: h('button', { type: 'button', style: style.primary, disabled: disabled || !activeAccount?.hasCredential, onClick: () => pullModels() }, '拉取最新模型')
             }),
             activeCatalog?.error ? h(Notice, { tone: 'error' }, activeCatalog.error) : null,
             models.length
               ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-                h('input', {
-                  type: 'search', style: style.input, value: modelFilter,
-                  placeholder: '搜索模型名称或家族 ID…',
-                  onChange: (e) => setModelFilter(e.target.value)
-                }),
-                h('div', { className: 'ddp-list' },
-                  (modelsOpen || filterQ ? filteredModels : filteredModels.slice(0, 8)).map((model) => h(ModelRow, {
-                    key: model.id, model, disabled, editor: modelEditor, draftError: modelDraftError, fieldErrors: modelFieldErrors,
-                    onToggle: toggleModel,
-                    onOpenEditor: (m) => { setModelEditor({ modelId: m.id, draft: modelDraftFrom(m) }); setModelDraftError(null); setModelFieldErrors(null); },
-                    onCloseEditor: () => { setModelEditor(null); setModelDraftError(null); setModelFieldErrors(null); },
-                    onChangeDraft: (patch) => setModelEditor((prev) => prev ? { ...prev, draft: { ...prev.draft, ...patch } } : prev),
-                    onSave: saveModelSettings,
-                    onReset: resetModelSettings
-                  }))),
-                !filterQ && filteredModels.length > 8
-                  ? h('button', { type: 'button', style: { ...style.btn, alignSelf: 'flex-start' }, onClick: () => setModelsOpen((p) => !p) }, modelsOpen ? '仅显示前 8 个' : `展开全部 ${filteredModels.length} 个模型`)
+                h('div', { className: 'ddp-model-toolbar' },
+                  h('input', {
+                    type: 'search', style: style.input, value: modelFilter,
+                    placeholder: '搜索模型名称或家族 ID…',
+                    onChange: (e) => setModelFilter(e.target.value)
+                  }),
+                  h('label', {
+                    className: 'ddp-model-filter-toggle',
+                    'data-active': hideLegacyModels ? 'true' : 'false',
+                    title: '开启后仅显示并注册当前主力模型，隐藏老旧模型（同步生效于聊天模型列表）'
+                  },
+                    h('input', {
+                      className: 'ddp-switch-input',
+                      type: 'checkbox',
+                      checked: hideLegacyModels,
+                      disabled,
+                      'aria-label': '过滤老旧模型',
+                      onChange: (e) => toggleHideLegacy(Boolean(e.target.checked))
+                    }),
+                    h('span', null, '过滤老旧模型'),
+                    legacyCount > 0
+                      ? h('span', { className: 'ddp-model-filter-meta' }, hideLegacyModels ? `已隐藏 ${legacyCount}` : `共 ${legacyCount} 旧`)
+                      : null)),
+                filteredModels.length
+                  ? h('div', { className: 'ddp-list' },
+                    (modelsOpen || filterQ ? filteredModels : filteredModels.slice(0, MODEL_PREVIEW_LIMIT)).map((model) => h(ModelRow, {
+                      key: model.id, model, disabled, editor: modelEditor, draftError: modelDraftError, fieldErrors: modelFieldErrors,
+                      onToggle: toggleModel,
+                      onOpenEditor: (m) => { setModelEditor({ modelId: m.id, draft: modelDraftFrom(m) }); setModelDraftError(null); setModelFieldErrors(null); },
+                      onCloseEditor: () => { setModelEditor(null); setModelDraftError(null); setModelFieldErrors(null); },
+                      onChangeDraft: (patch) => setModelEditor((prev) => prev ? { ...prev, draft: { ...prev.draft, ...patch } } : prev),
+                      onSave: saveModelSettings,
+                      onReset: resetModelSettings
+                    })))
+                  : h(Notice, {
+                    tone: 'muted',
+                    action: hiddenLegacyMatches > 0
+                      ? h('button', { type: 'button', style: style.btn, disabled, onClick: () => toggleHideLegacy(false) }, `显示老旧模型 (${hiddenLegacyMatches})`)
+                      : null
+                  }, hiddenLegacyMatches > 0
+                    ? `未在当前主力模型中匹配到「${modelFilter.trim()}」，但有 ${hiddenLegacyMatches} 个老旧模型匹配。`
+                    : `未找到匹配「${modelFilter.trim()}」的模型。`),
+                !filterQ && filteredModels.length > MODEL_PREVIEW_LIMIT
+                  ? h('button', { type: 'button', style: { ...style.btn, alignSelf: 'flex-start' }, onClick: () => setModelsOpen((p) => !p) }, modelsOpen ? `仅显示前 ${MODEL_PREVIEW_LIMIT} 个` : `展开全部 ${filteredModels.length} 个模型`)
                   : null)
               : h('p', { style: style.muted }, activeAccount ? '暂无模型数据，点击「拉取最新模型」获取。' : '请先在「账号与登录」中选择或添加账号。'))),
 

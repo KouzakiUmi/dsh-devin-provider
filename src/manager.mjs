@@ -337,10 +337,15 @@ export class DevinController {
       catalogs: state.accounts.map((a) => {
         const status = catalogStatus(state, a.id);
         const models = getModelRows(state, a.id);
+        const hideLegacy = state.settings?.hideLegacyModels !== false;
+        const activeModels = hideLegacy ? models.filter((m) => !m.legacy) : models;
         return {
           accountId: a.id,
           count: status.broken ? 0 : models.length,
-          enabledCount: models.filter((m) => m.enabled).length,
+          visibleCount: status.broken ? 0 : activeModels.length,
+          legacyCount: status.broken ? 0 : models.filter((m) => m.legacy).length,
+          enabledCount: activeModels.filter((m) => m.enabled).length,
+          totalEnabledCount: models.filter((m) => m.enabled).length,
           source: status.source,
           ...(status.broken ? { error: '模型缓存损坏，请重新拉取模型' } : {}),
           ...(status.updatedAt ? { updatedAt: status.updatedAt } : {}),
@@ -747,11 +752,22 @@ export class DevinController {
         next.enabled = request.enabled;
       } else if (op === 'saveSettings') {
         const s = request.settings ?? {};
+        const nextHideLegacy = s.hideLegacyModels === undefined
+          ? (next.settings?.hideLegacyModels !== false)
+          : s.hideLegacyModels;
+        if (typeof nextHideLegacy !== 'boolean') throw new Error('过滤老旧模型开关必须是布尔值');
         next.settings = {
           cacheKeepalive: normalizeKeepaliveSettings(s.cacheKeepalive),
-          serverUrl: normalizeServerUrl(s.serverUrl)
+          serverUrl: normalizeServerUrl(s.serverUrl),
+          hideLegacyModels: nextHideLegacy
         };
         if (!next.settings.cacheKeepalive.enabled) stopAllKeepalive();
+      } else if (op === 'setHideLegacyModels') {
+        if (typeof request.enabled !== 'boolean') throw new Error('过滤老旧模型开关必须是布尔值');
+        next.settings = {
+          ...next.settings,
+          hideLegacyModels: request.enabled
+        };
       } else if (op === 'setModelEnabled') {
         this.owner(accountId);
         assertModelId(request.modelId);

@@ -271,6 +271,98 @@ test('src/client.js mounts settings.section, renders quota/keepalive/models/acco
   }
 });
 
+test('Model catalog defaults to filtering legacy models, sorts enabled models first, and toggles setHideLegacyModels', async () => {
+  const remote = readSource('src/remote.mjs').replace(/^export /gm, '');
+  const client = readSource('src/client.js').replace(/^export /gm, '');
+  const wrapped = `(require, React) => {\n'use strict';\n${remote}\n${client}\nreturn { name, inject, apply };\n}`;
+  const mini = createMiniReact();
+  const mod = eval(wrapped)(() => mini.React, mini.React);
+
+  const calls = [];
+  let hideLegacy = true;
+  const makeModel = (id, name, { enabled = true, legacy = false } = {}) => ({
+    id,
+    name,
+    free: false,
+    legacy,
+    enabled,
+    settings: enabled ? {} : { enabled: false },
+    defaults: { contextWindow: 262144, maxTokens: 65536, imageInput: true, toolsEnabled: true, reasoningEfforts: { medium: 'medium', high: 'high' }, defaultReasoning: null },
+    effective: { contextWindow: 262144, maxTokens: 65536, imageInput: true, toolsEnabled: true, reasoningEfforts: { medium: 'medium', high: 'high' }, defaultReasoning: null }
+  });
+  const makeSnapshot = () => ({
+    revision: hideLegacy ? 'r-on' : 'r-off',
+    route: 'devin',
+    enabled: true,
+    activeAccountId: 'a1',
+    accounts: [{ id: 'a1', label: 'Devin', displayName: 'u@example.com', authMode: 'oauth', hasCredential: true }],
+    settings: { cacheKeepalive: { enabled: false, intervalSec: 285, maxPings: 6 }, serverUrl: '', hideLegacyModels: hideLegacy },
+    quotas: {},
+    fastSessionsCount: 0,
+    catalogs: [{
+      accountId: 'a1',
+      count: 4,
+      source: 'remote',
+      // 故意把已停用模型放在前面，验证前端渲染仍保证已启用置顶
+      models: [
+        makeModel('swe-2', 'SWE-2', { enabled: false, legacy: false }),
+        makeModel('swe-2-1', 'SWE-2.1', { enabled: true, legacy: false }),
+        makeModel('claude-opus-4.6', 'Claude Opus 4.6', { enabled: true, legacy: true }),
+        makeModel('claude-opus-5-5', 'Claude Opus 5.5', { enabled: true, legacy: false })
+      ]
+    }],
+    login: { jobId: null, accountId: null, state: 'idle', message: '', url: null }
+  });
+
+  let slotEntry = null;
+  const ctx = {
+    effect(fn) { fn(); },
+    get(name) {
+      if (name === 'remote.devinProvider') {
+        return {
+          invoke: async (req) => {
+            calls.push(req);
+            if (req.op === 'setHideLegacyModels') hideLegacy = Boolean(req.enabled);
+            return { ok: true, value: makeSnapshot() };
+          }
+        };
+      }
+      return null;
+    },
+    inject() {},
+    remote: { $mount: async () => () => {} },
+    slots: {
+      inject: (_id, cb) => cb(),
+      register: (meta, comp) => { slotEntry = { meta, comp }; return () => {}; }
+    }
+  };
+
+  try {
+    mod.apply(ctx);
+    const injected = slotEntry.meta.inject();
+    let tree = await mini.flush(() => mini.React.createElement(slotEntry.comp, injected));
+
+    // 默认开启过滤老旧模型开关
+    const filterSwitch = findAll(tree, (n) => n.type === 'input' && n.props?.['aria-label'] === '过滤老旧模型')[0];
+    assert.ok(filterSwitch, '应渲染「过滤老旧模型」开关');
+    assert.equal(filterSwitch.props.checked, true);
+
+    const renderedIds = (t) => findAll(t, (n) => n.props?.className === 'ddp-model-id').map(textOf);
+    // 开启过滤时只展示 3 个主力模型，且已启用的 swe-2-1 / claude-opus-5-5 排在已停用的 swe-2 前面
+    assert.deepEqual(renderedIds(tree), ['swe-2-1', 'claude-opus-5-5', 'swe-2']);
+    assert.equal(textOf(tree).includes('Claude Opus 4.6'), false);
+
+    // 关闭过滤开关后触发 setHideLegacyModels(false)，显示老旧模型并带「老旧」标签，且已启用依然排在前面
+    filterSwitch.props.onChange({ target: { checked: false } });
+    tree = await mini.flush(() => mini.React.createElement(slotEntry.comp, injected));
+    assert.ok(calls.some((c) => c.op === 'setHideLegacyModels' && c.enabled === false));
+    assert.deepEqual(renderedIds(tree), ['swe-2-1', 'claude-opus-4.6', 'claude-opus-5-5', 'swe-2']);
+    assert.ok(textOf(tree).includes('老旧'));
+  } finally {
+    mini.unmountAll();
+  }
+});
+
 test('FusionPillEntry shows lightning button only for fast-capable models and toggles setFastMode', async () => {
   const remote = readSource('src/remote.mjs').replace(/^export /gm, '');
   const client = readSource('src/client.js').replace(/^export /gm, '');

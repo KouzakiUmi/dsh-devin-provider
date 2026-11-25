@@ -69,3 +69,9 @@
 ### 插件审查结论（全模块）
 - pb/wire/adapter/index/catalog/state/manager/quota/keepalive/lease/defaults/oauth/cli/client 均已审查：凭据脱敏、accountId/路径穿越防护、PKCE state 校验、回调仅绑 127.0.0.1、HTML 转义、CLI spawn 无注入 + 隔离 home、状态锁 + 原子写齐全，未发现关键缺陷。
 - 先前两项疑似问题已定性：Claude「思考+摘要进 CoT」为 Devin 服务端多轮工具上下文行为（签名覆盖整段思考，须原样回放，不可拆分）；SWE-2 schema 写错为 magpie 插件侧问题，本插件目录/参数处理与参考实现一致。
+
+## SWE-2.1 同步与老旧模型过滤 / 已启用置顶
+
+- **Devin CLI 与 SWE-2.1**：本机 `devin` CLI 已为最新 `3000.14.30821`；SWE-2.1（`swe-2-1`，256K/64K、图片输入、5 档免费标准变体 + 5 档收费 Lightning 变体）已由服务端下发。同步更新 `src/pb.mjs` 的 `CLI_VERSION` 至 `3000.14.30821` 与 `src/catalog-snapshot.json`（54 家族、12 个免费变体、14 个官方推荐家族 `recommendedIds`）。
+- **老旧模型过滤（默认开启，双端生效）**：`parseRecommended()` 从 `GetCliModelConfigs` protobuf 的 field 11（`ClientModelConfig.is_recommended`）解析官方推荐家族；旧缓存或 CLI fallback 回退到 `SNAPSHOT_RECOMMENDED`，自定义私服无命中时不误清空列表。`state.settings.hideLegacyModels` 默认 `true`（旧版 `state.json` 缺该字段时自动回退为 `true`），通过 `setHideLegacyModels` RPC 原子切换；`saveSettings` 未传该字段时保留现值。开启时 `profileFor`、`captureModelDefaults` 与设置页模型列表同步隐藏老旧模型，并把 `profile.models` ID 序列纳入 `index.mjs` 路由指纹以即时重建适配器。
+- **已启用模型置顶**：`getModelRows()` 与 `src/client.js` 均对模型列表执行稳定排序，确保已启用模型始终排在已停用模型前面且各自保持原序；设置页模型搜索栏右侧新增「过滤老旧模型」默认开启开关，关闭后老旧模型带「老旧」标签，搜索仅命中老旧模型时提供一键显示入口。

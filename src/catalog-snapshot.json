@@ -1,6 +1,85 @@
 {
   "families": [
     [
+      "swe-2-1",
+      "SWE-2.1",
+      [],
+      [
+        [
+          "swe-2-1-medium",
+          "SWE-2.1 Medium",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1",
+          "SWE-2.1",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-low",
+          "SWE-2.1 Low",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-high",
+          "SWE-2.1 High",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-xhigh",
+          "SWE-2.1 XHigh",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-max",
+          "SWE-2.1 Max",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-low-lightning",
+          "SWE-2.1 Ultrafast Low",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-medium-lightning",
+          "SWE-2.1 Ultrafast Medium",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-lightning",
+          "SWE-2.1 Ultrafast",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-high-lightning",
+          "SWE-2.1 Ultrafast High",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-xhigh-lightning",
+          "SWE-2.1 Ultrafast XHigh",
+          262144,
+          65536
+        ],
+        [
+          "swe-2-1-max-lightning",
+          "SWE-2.1 Ultrafast Max",
+          262144,
+          65536
+        ]
+      ]
+    ],
+    [
       "swe-2",
       "SWE-2",
       [
@@ -27,19 +106,19 @@
         ],
         [
           "swe-2-medium-lightning",
-          "SWE-2 Medium Lightning",
+          "SWE-2 Medium Ultrafast",
           262144,
           128000
         ],
         [
           "swe-2-high-lightning",
-          "SWE-2 High Lightning",
+          "SWE-2 High Ultrafast",
           262144,
           128000
         ],
         [
           "swe-2-max-lightning",
-          "SWE-2 Max Lightning",
+          "SWE-2 Max Ultrafast",
           262144,
           128000
         ]
@@ -70,58 +149,86 @@
         ],
         [
           "swe-2-flash-medium-lightning",
-          "SWE-2 Flash Medium Lightning",
+          "SWE-2 Flash Medium Ultrafast",
           262144,
           131072
         ],
         [
           "swe-2-flash-high-lightning",
-          "SWE-2 Flash High Lightning",
+          "SWE-2 Flash High Ultrafast",
           262144,
           131072
         ],
         [
           "swe-2-flash-max-lightning",
-          "SWE-2 Flash Max Lightning",
+          "SWE-2 Flash Max Ultrafast",
           262144,
           131072
         ]
       ]
     ],
     [
-      "claude-fable-5-1",
-      "Claude Fable 5.1",
-      [
-        "fable"
-      ],
+      "claude-fable-5-2",
+      "Claude Fable 5.2",
+      [],
       [
         [
-          "claude-fable-5-1-medium",
-          "Claude Fable 5.1 Medium",
+          "claude-fable-5-2-medium",
+          "Claude Fable 5.2 Medium",
           1000000,
           128000
         ],
         [
-          "claude-fable-5-1-low",
-          "Claude Fable 5.1 Low",
+          "claude-fable-5-2-low",
+          "Claude Fable 5.2 Low",
           1000000,
           128000
         ],
         [
-          "claude-fable-5-1-high",
-          "Claude Fable 5.1 High",
+          "claude-fable-5-2-high",
+          "Claude Fable 5.2 High",
           1000000,
           128000
         ],
         [
-          "claude-fable-5-1-xhigh",
-          "Claude Fable 5.1 XHigh",
+          "claude-fable-5-2-xhigh",
+          "Claude Fable 5.2 XHigh",
           1000000,
           128000
         ],
         [
-          "claude-fable-5-1-max",
-          "Claude Fable 5.1 Max",
+          "claude-fable-5-2-max",
+          "Claude Fable 5.2 Max",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-2-low-fast",
+          "Claude Fable 5.2 Low Fast",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-2-medium-fast",
+          "Claude Fable 5.2 Medium Fast",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-2-high-fast",
+          "Claude Fable 5.2 High Fast",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-2-xhigh-fast",
+          "Claude Fable 5.2 XHigh Fast",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-2-max-fast",
+          "Claude Fable 5.2 Max Fast",
           1000000,
           128000
         ]
@@ -190,6 +297,73 @@
           "claude-opus-5-5-max-fast",
           "Claude Opus 5.5 Max Fast",
           1000000,
+          128000
+        ]
+      ]
+    ],
+    [
+      "gpt-6-2-astra",
+      "GPT-6.2 Astra",
+      [],
+      [
+        [
+          "gpt-6-2-astra-medium",
+          "GPT-6.2 Astra Medium Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-low",
+          "GPT-6.2 Astra Low Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-high",
+          "GPT-6.2 Astra High Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-xhigh",
+          "GPT-6.2 Astra XHigh Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-max",
+          "GPT-6.2 Astra Max Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-low-priority",
+          "GPT-6.2 Astra Low Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-medium-priority",
+          "GPT-6.2 Astra Medium Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-high-priority",
+          "GPT-6.2 Astra High Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-xhigh-priority",
+          "GPT-6.2 Astra XHigh Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-astra-max-priority",
+          "GPT-6.2 Astra Max Thinking Fast",
+          1050000,
           128000
         ]
       ]
@@ -420,95 +594,58 @@
       ]
     ],
     [
-      "gemini-4-argon",
-      "Gemini 4 Argon",
+      "gemini-4-carbon",
+      "Gemini 4 Carbon",
       [],
       [
         [
-          "gemini-4-argon-medium",
-          "Gemini 4 Argon Medium",
+          "gemini-4-carbon-medium",
+          "Gemini 4 Carbon Medium",
           1048576,
           1000000
         ],
         [
-          "gemini-4-argon-low",
-          "Gemini 4 Argon Low",
+          "gemini-4-carbon-low",
+          "Gemini 4 Carbon Low",
           1048576,
           1000000
         ],
         [
-          "gemini-4-argon-high",
-          "Gemini 4 Argon High",
+          "gemini-4-carbon-high",
+          "Gemini 4 Carbon High",
           1048576,
           1000000
         ]
       ]
     ],
     [
-      "kimi-k3",
-      "Kimi K3",
+      "kimi-k3-1-pro",
+      "Kimi K3.1 Pro",
       [],
       [
         [
-          "kimi-k3-high",
-          "Kimi K3 High",
+          "kimi-k3-1-pro-max",
+          "Kimi K3.1 Pro Max",
           1048576,
           131072
         ],
         [
-          "kimi-k3-low",
-          "Kimi K3 Low",
+          "kimi-k3-1-pro-low",
+          "Kimi K3.1 Pro Low",
           1048576,
           131072
         ],
         [
-          "kimi-k3-max",
-          "Kimi K3 Max",
+          "kimi-k3-1-pro-medium",
+          "Kimi K3.1 Pro Medium",
           1048576,
           131072
-        ]
-      ]
-    ],
-    [
-      "glm-5.2",
-      "GLM-5.2",
-      [],
-      [
-        [
-          "glm-5-2",
-          "GLM-5.2 High",
-          200000,
-          128000
         ],
         [
-          "glm-5-2-max",
-          "GLM-5.2 Max",
-          200000,
-          128000
-        ],
-        [
-          "glm-5-2-1m",
-          "GLM-5.2 High 1M",
-          1000000,
-          128000
-        ],
-        [
-          "glm-5-2-max-1m",
-          "GLM-5.2 Max 1M",
-          1000000,
-          128000
-        ],
-        [
-          "glm-5-2-none",
-          "GLM-5.2 No Thinking",
-          200000,
-          128000
-        ],
-        [
-          "glm-5-2-none-1m",
-          "GLM-5.2 No Thinking 1M",
-          1000000,
-          128000
+          "kimi-k3-1-pro-high",
+          "Kimi K3.1 Pro High",
+          1048576,
+          131072
         ]
       ]
     ],
@@ -812,6 +949,45 @@
       ]
     ],
     [
+      "claude-fable-5-1",
+      "Claude Fable 5.1",
+      [
+        "fable"
+      ],
+      [
+        [
+          "claude-fable-5-1-low",
+          "Claude Fable 5.1 Low",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-1-medium",
+          "Claude Fable 5.1 Medium",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-1-high",
+          "Claude Fable 5.1 High",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-1-xhigh",
+          "Claude Fable 5.1 XHigh",
+          1000000,
+          128000
+        ],
+        [
+          "claude-fable-5-1-max",
+          "Claude Fable 5.1 Max",
+          1000000,
+          128000
+        ]
+      ]
+    ],
+    [
       "claude-sonnet-5",
       "Claude Sonnet 5",
       [
@@ -972,6 +1148,93 @@
           "Gemini 3.7 Flash High",
           1048576,
           65535
+        ]
+      ]
+    ],
+    [
+      "gemini-4-argon",
+      "Gemini 4 Argon",
+      [],
+      [
+        [
+          "gemini-4-argon-low",
+          "Gemini 4 Argon Low",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-argon-medium",
+          "Gemini 4 Argon Medium",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-argon-high",
+          "Gemini 4 Argon High",
+          1048576,
+          1000000
+        ]
+      ]
+    ],
+    [
+      "gemini-4-hydrogen",
+      "Gemini 4 Hydrogen",
+      [],
+      [
+        [
+          "gemini-4-hydrogen-low",
+          "Gemini 4 Hydrogen Low",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-hydrogen-medium",
+          "Gemini 4 Hydrogen Medium",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-hydrogen-high",
+          "Gemini 4 Hydrogen High",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-hydrogen-xhigh",
+          "Gemini 4 Hydrogen XHigh",
+          1048576,
+          1000000
+        ]
+      ]
+    ],
+    [
+      "gemini-4-neon",
+      "Gemini 4 Neon",
+      [],
+      [
+        [
+          "gemini-4-neon-low",
+          "Gemini 4 Neon Low",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-neon-medium",
+          "Gemini 4 Neon Medium",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-neon-high",
+          "Gemini 4 Neon High",
+          1048576,
+          1000000
+        ],
+        [
+          "gemini-4-neon-xhigh",
+          "Gemini 4 Neon XHigh",
+          1048576,
+          1000000
         ]
       ]
     ],
@@ -1213,6 +1476,73 @@
       ]
     ],
     [
+      "gpt-6-2-sol",
+      "GPT-6.2 Sol",
+      [],
+      [
+        [
+          "gpt-6-2-sol-low",
+          "GPT-6.2 Sol Low Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-medium",
+          "GPT-6.2 Sol Medium Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-high",
+          "GPT-6.2 Sol High Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-xhigh",
+          "GPT-6.2 Sol XHigh Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-max",
+          "GPT-6.2 Sol Max Thinking",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-low-priority",
+          "GPT-6.2 Sol Low Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-medium-priority",
+          "GPT-6.2 Sol Medium Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-high-priority",
+          "GPT-6.2 Sol High Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-xhigh-priority",
+          "GPT-6.2 Sol XHigh Thinking Fast",
+          1050000,
+          128000
+        ],
+        [
+          "gpt-6-2-sol-max-priority",
+          "GPT-6.2 Sol Max Thinking Fast",
+          1050000,
+          128000
+        ]
+      ]
+    ],
+    [
       "gpt-6-1-sol",
       "GPT-6.1 Sol",
       [],
@@ -1347,6 +1677,49 @@
       ]
     ],
     [
+      "glm-5.2",
+      "GLM-5.2",
+      [],
+      [
+        [
+          "glm-5-2",
+          "GLM-5.2 High",
+          200000,
+          128000
+        ],
+        [
+          "glm-5-2-max",
+          "GLM-5.2 Max",
+          200000,
+          128000
+        ],
+        [
+          "glm-5-2-1m",
+          "GLM-5.2 High 1M",
+          1000000,
+          128000
+        ],
+        [
+          "glm-5-2-max-1m",
+          "GLM-5.2 Max 1M",
+          1000000,
+          128000
+        ],
+        [
+          "glm-5-2-none",
+          "GLM-5.2 No Thinking",
+          200000,
+          128000
+        ],
+        [
+          "glm-5-2-none-1m",
+          "GLM-5.2 No Thinking 1M",
+          1000000,
+          128000
+        ]
+      ]
+    ],
+    [
       "grok-4-6",
       "Grok 4.6",
       [],
@@ -1473,6 +1846,50 @@
           "Nemotron 3.5 Super High",
           1048576,
           65536
+        ]
+      ]
+    ],
+    [
+      "nemotron-3-5-lightning",
+      "Nemotron 3.5 Lightning",
+      [],
+      [
+        [
+          "nemotron-3-5-lightning-none",
+          "Nemotron 3.5 Lightning None",
+          1048576,
+          65536
+        ],
+        [
+          "nemotron-3-5-lightning-high",
+          "Nemotron 3.5 Lightning High",
+          1048576,
+          65536
+        ]
+      ]
+    ],
+    [
+      "kimi-k3",
+      "Kimi K3",
+      [],
+      [
+        [
+          "kimi-k3-low",
+          "Kimi K3 Low",
+          1048576,
+          131072
+        ],
+        [
+          "kimi-k3-high",
+          "Kimi K3 High",
+          1048576,
+          131072
+        ],
+        [
+          "kimi-k3-max",
+          "Kimi K3 Max",
+          1048576,
+          131072
         ]
       ]
     ],
@@ -1881,500 +2298,44 @@
           384000
         ]
       ]
-    ],
-    [
-      "swe-1.7-lightning",
-      "SWE-1.7 Lightning",
-      [],
-      [
-        [
-          "swe-1-7-lightning",
-          "SWE-1.7 Lightning Max",
-          202752,
-          96000
-        ],
-        [
-          "swe-1-7-lightning-medium",
-          "SWE-1.7 Lightning Medium",
-          202752,
-          96000
-        ]
-      ]
-    ],
-    [
-      "inkling",
-      "Inkling",
-      [],
-      [
-        [
-          "inkling-none",
-          "Inkling None",
-          1048576,
-          131072
-        ],
-        [
-          "inkling-low",
-          "Inkling Low",
-          1048576,
-          131072
-        ],
-        [
-          "inkling-medium",
-          "Inkling Medium",
-          1048576,
-          131072
-        ],
-        [
-          "inkling-high",
-          "Inkling High",
-          1048576,
-          131072
-        ],
-        [
-          "inkling-xhigh",
-          "Inkling X-High",
-          1048576,
-          131072
-        ],
-        [
-          "inkling-max",
-          "Inkling Max",
-          1048576,
-          131072
-        ]
-      ]
-    ],
-    [
-      "grok-4.5",
-      "Grok 4.5",
-      [],
-      [
-        [
-          "grok-4-5-low",
-          "Grok 4.5 Low",
-          500000,
-          100000
-        ],
-        [
-          "grok-4-5-medium",
-          "Grok 4.5 Medium",
-          500000,
-          100000
-        ],
-        [
-          "grok-4-5-high",
-          "Grok 4.5 High",
-          500000,
-          100000
-        ]
-      ]
-    ],
-    [
-      "gpt-5.2",
-      "GPT-5.2",
-      [],
-      [
-        [
-          "MODEL_GPT_5_2_LOW",
-          "GPT-5.2 Low Thinking",
-          384000,
-          128000
-        ],
-        [
-          "MODEL_GPT_5_2_MEDIUM",
-          "GPT-5.2 Medium Thinking",
-          384000,
-          128000
-        ],
-        [
-          "MODEL_GPT_5_2_NONE",
-          "GPT-5.2 No Thinking",
-          384000,
-          128000
-        ],
-        [
-          "MODEL_GPT_5_2_HIGH",
-          "GPT-5.2 High Thinking",
-          384000,
-          128000
-        ],
-        [
-          "MODEL_GPT_5_2_XHIGH",
-          "GPT-5.2 XHigh Thinking",
-          384000,
-          128000
-        ]
-      ]
-    ],
-    [
-      "claude-opus-4.5",
-      "Claude Opus 4.5",
-      [],
-      [
-        [
-          "MODEL_CLAUDE_4_5_OPUS",
-          "Claude Opus 4.5",
-          200000,
-          64000
-        ],
-        [
-          "MODEL_CLAUDE_4_5_OPUS_THINKING",
-          "Claude Opus 4.5 Thinking",
-          200000,
-          64000
-        ]
-      ]
-    ],
-    [
-      "Claude Haiku 4.5",
-      "Claude Haiku 4.5",
-      [],
-      [
-        [
-          "MODEL_PRIVATE_11",
-          "Claude Haiku 4.5",
-          200000,
-          64000
-        ]
-      ]
-    ],
-    [
-      "claude-sonnet-4.5",
-      "Claude Sonnet 4.5",
-      [],
-      [
-        [
-          "MODEL_PRIVATE_2",
-          "Claude Sonnet 4.5",
-          200000,
-          64000
-        ],
-        [
-          "MODEL_PRIVATE_3",
-          "Claude Sonnet 4.5 Thinking",
-          200000,
-          64000
-        ]
-      ]
-    ],
-    [
-      "GPT-4.1",
-      "GPT-4.1",
-      [],
-      [
-        [
-          "MODEL_CHAT_GPT_4_1_2025_04_14",
-          "GPT-4.1",
-          1047576,
-          32768
-        ]
-      ]
-    ],
-    [
-      "gpt-5.1",
-      "GPT-5.1",
-      [],
-      [
-        [
-          "MODEL_PRIVATE_12",
-          "GPT-5.1 No Thinking",
-          272000,
-          128000
-        ],
-        [
-          "MODEL_PRIVATE_13",
-          "GPT-5.1 Low Thinking",
-          272000,
-          128000
-        ],
-        [
-          "MODEL_PRIVATE_14",
-          "GPT-5.1 Medium Thinking",
-          272000,
-          128000
-        ],
-        [
-          "MODEL_PRIVATE_15",
-          "GPT-5.1 High Thinking",
-          272000,
-          128000
-        ]
-      ]
-    ],
-    [
-      "gpt-5.3-codex",
-      "GPT-5.3-Codex",
-      [
-        "codex"
-      ],
-      [
-        [
-          "gpt-5-3-codex-low",
-          "GPT-5.3-Codex Low",
-          400000,
-          128000
-        ],
-        [
-          "gpt-5-3-codex-medium",
-          "GPT-5.3-Codex Medium",
-          400000,
-          128000
-        ],
-        [
-          "gpt-5-3-codex-high",
-          "GPT-5.3-Codex High",
-          400000,
-          128000
-        ],
-        [
-          "gpt-5-3-codex-xhigh",
-          "GPT-5.3-Codex X-High",
-          400000,
-          128000
-        ],
-        [
-          "gpt-5-3-codex-low-priority",
-          "GPT-5.3-Codex Low Fast",
-          400000,
-          128000
-        ],
-        [
-          "gpt-5-3-codex-medium-priority",
-          "GPT-5.3-Codex Medium Fast",
-          400000,
-          128000
-        ],
-        [
-          "gpt-5-3-codex-high-priority",
-          "GPT-5.3-Codex High Fast",
-          400000,
-          128000
-        ],
-        [
-          "gpt-5-3-codex-xhigh-priority",
-          "GPT-5.3-Codex XHigh Fast",
-          400000,
-          128000
-        ]
-      ]
-    ],
-    [
-      "swe-1.6-fast",
-      "SWE-1.6 Fast",
-      [],
-      [
-        [
-          "swe-1-6-fast",
-          "SWE-1.6 Fast",
-          200000,
-          128000
-        ]
-      ]
-    ],
-    [
-      "gemini-3.1-pro",
-      "Gemini 3.1 Pro",
-      [],
-      [
-        [
-          "gemini-3-1-pro-low",
-          "Gemini 3.1 Pro Low Thinking",
-          1048576,
-          65535
-        ],
-        [
-          "gemini-3-1-pro-high",
-          "Gemini 3.1 Pro High Thinking",
-          1048576,
-          65535
-        ]
-      ]
-    ],
-    [
-      "gemini-3.0-flash",
-      "Gemini 3 Flash",
-      [],
-      [
-        [
-          "MODEL_GOOGLE_GEMINI_3_0_FLASH_MINIMAL",
-          "Gemini 3 Flash Minimal",
-          1048576,
-          65535
-        ],
-        [
-          "MODEL_GOOGLE_GEMINI_3_0_FLASH_LOW",
-          "Gemini 3 Flash Low",
-          1048576,
-          65535
-        ],
-        [
-          "MODEL_GOOGLE_GEMINI_3_0_FLASH_MEDIUM",
-          "Gemini 3 Flash Medium",
-          1048576,
-          65535
-        ],
-        [
-          "MODEL_GOOGLE_GEMINI_3_0_FLASH_HIGH",
-          "Gemini 3 Flash High",
-          1048576,
-          65535
-        ]
-      ]
     ]
   ],
-  "noImages": [
-    "glm-5-2",
-    "glm-5-2-max",
-    "glm-5-2-1m",
-    "glm-5-2-max-1m",
-    "glm-5-2-none",
-    "glm-5-2-none-1m",
-    "glm-5-3-low",
-    "glm-5-3-high",
-    "glm-5-3-max",
-    "inkling-none",
-    "inkling-low",
-    "inkling-medium",
-    "inkling-high",
-    "inkling-xhigh",
-    "inkling-max",
-    "deepseek-v4-flash-high",
-    "deepseek-v4-flash-max",
-    "deepseek-v4-pro-high",
-    "deepseek-v4-pro-max",
-    "nemotron-3-ultra-none",
-    "nemotron-3-ultra-medium",
-    "nemotron-3-ultra-high",
-    "swe-2-flash-medium",
-    "swe-2-flash-high",
-    "swe-2-flash-max"
-  ],
   "freeIds": [
+    "swe-2-1-medium",
     "swe-2-high",
+    "swe-2-flash-medium",
     "swe-2-medium",
     "swe-2-max",
-    "swe-2-flash-medium",
     "swe-2-flash-high",
-    "swe-2-flash-max"
+    "swe-2-flash-max",
+    "swe-2-1",
+    "swe-2-1-low",
+    "swe-2-1-high",
+    "swe-2-1-xhigh",
+    "swe-2-1-max"
+  ],
+  "recommendedIds": [
+    "swe-2-1",
+    "swe-2",
+    "swe-2-flash",
+    "claude-fable-5-2",
+    "claude-opus-5-5",
+    "gpt-6-2-astra",
+    "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna",
+    "gemini-4-carbon",
+    "kimi-k3-1-pro",
+    "glm-5-3",
+    "claude-sonnet-5-5",
+    "gemini-3-8-flash"
   ],
   "prices": {
-    "adaptive": {
-      "input": 0.5,
-      "output": 2,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "swe-2-medium-lightning": {
-      "input": 1,
-      "output": 5,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "swe-2-high-lightning": {
-      "input": 1,
-      "output": 5,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "swe-2-max-lightning": {
-      "input": 1,
-      "output": 5,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "swe-2-flash-medium-lightning": {
-      "input": 1,
-      "output": 5,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "swe-2-flash-high-lightning": {
-      "input": 1,
-      "output": 5,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "swe-2-flash-max-lightning": {
-      "input": 1,
-      "output": 5,
-      "cache": {
-        "read": 0.1
-      }
-    },
     "claude-fable-5-2-medium": {
       "input": 8,
       "output": 40,
       "cache": {
         "read": 0.2
-      }
-    },
-    "claude-fable-5-2-low": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-fable-5-2-high": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-fable-5-2-xhigh": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-fable-5-2-max": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-fable-5-2-low-fast": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-fable-5-2-medium-fast": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-fable-5-2-high-fast": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-fable-5-2-xhigh-fast": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-fable-5-2-max-fast": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.4
       }
     },
     "claude-opus-5-5-medium": {
@@ -2384,137 +2345,11 @@
         "read": 0.2
       }
     },
-    "claude-opus-5-5-low": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-opus-5-5-high": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-opus-5-5-xhigh": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-opus-5-5-max": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "claude-opus-5-5-low-fast": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-opus-5-5-medium-fast": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-opus-5-5-high-fast": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-opus-5-5-xhigh-fast": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "claude-opus-5-5-max-fast": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
     "gpt-6-2-astra-medium": {
       "input": 8,
       "output": 40,
       "cache": {
         "read": 0.4
-      }
-    },
-    "gpt-6-2-astra-low": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-2-astra-high": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-2-astra-xhigh": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-2-astra-max": {
-      "input": 8,
-      "output": 40,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-2-astra-low-priority": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.8
-      }
-    },
-    "gpt-6-2-astra-medium-priority": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.8
-      }
-    },
-    "gpt-6-2-astra-high-priority": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.8
-      }
-    },
-    "gpt-6-2-astra-xhigh-priority": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.8
-      }
-    },
-    "gpt-6-2-astra-max-priority": {
-      "input": 16,
-      "output": 80,
-      "cache": {
-        "read": 0.8
       }
     },
     "gpt-6-astra-medium": {
@@ -2524,151 +2359,11 @@
         "read": 1
       }
     },
-    "gpt-6-astra-low": {
-      "input": 10,
-      "output": 50,
-      "cache": {
-        "read": 1
-      }
-    },
-    "gpt-6-astra-high": {
-      "input": 10,
-      "output": 50,
-      "cache": {
-        "read": 1
-      }
-    },
-    "gpt-6-astra-xhigh": {
-      "input": 10,
-      "output": 50,
-      "cache": {
-        "read": 1
-      }
-    },
-    "gpt-6-astra-max": {
-      "input": 10,
-      "output": 50,
-      "cache": {
-        "read": 1
-      }
-    },
-    "gpt-6-astra-low-priority": {
-      "input": 20,
-      "output": 100,
-      "cache": {
-        "read": 2
-      }
-    },
-    "gpt-6-astra-medium-priority": {
-      "input": 20,
-      "output": 100,
-      "cache": {
-        "read": 2
-      }
-    },
-    "gpt-6-astra-high-priority": {
-      "input": 20,
-      "output": 100,
-      "cache": {
-        "read": 2
-      }
-    },
-    "gpt-6-astra-xhigh-priority": {
-      "input": 20,
-      "output": 100,
-      "cache": {
-        "read": 2
-      }
-    },
-    "gpt-6-astra-max-priority": {
-      "input": 20,
-      "output": 100,
-      "cache": {
-        "read": 2
-      }
-    },
     "gpt-6-sol-medium": {
       "input": 2,
       "output": 10,
       "cache": {
         "read": 0.2
-      }
-    },
-    "gpt-6-sol-none": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "gpt-6-sol-low": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "gpt-6-sol-high": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "gpt-6-sol-xhigh": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "gpt-6-sol-max": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "gpt-6-sol-none-priority": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-sol-low-priority": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-sol-medium-priority": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-sol-high-priority": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-sol-xhigh-priority": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.4
-      }
-    },
-    "gpt-6-sol-max-priority": {
-      "input": 4,
-      "output": 20,
-      "cache": {
-        "read": 0.4
       }
     },
     "gpt-6-luna-medium": {
@@ -2678,83 +2373,6 @@
         "read": 0.01
       }
     },
-    "gpt-6-luna-none": {
-      "input": 0.1,
-      "output": 0.5,
-      "cache": {
-        "read": 0.01
-      }
-    },
-    "gpt-6-luna-low": {
-      "input": 0.1,
-      "output": 0.5,
-      "cache": {
-        "read": 0.01
-      }
-    },
-    "gpt-6-luna-high": {
-      "input": 0.1,
-      "output": 0.5,
-      "cache": {
-        "read": 0.01
-      }
-    },
-    "gpt-6-luna-xhigh": {
-      "input": 0.1,
-      "output": 0.5,
-      "cache": {
-        "read": 0.01
-      }
-    },
-    "gpt-6-luna-max": {
-      "input": 0.1,
-      "output": 0.5,
-      "cache": {
-        "read": 0.01
-      }
-    },
-    "gpt-6-luna-none-priority": {
-      "input": 0.2,
-      "output": 1,
-      "cache": {
-        "read": 0.02
-      }
-    },
-    "gpt-6-luna-low-priority": {
-      "input": 0.2,
-      "output": 1,
-      "cache": {
-        "read": 0.02
-      }
-    },
-    "gpt-6-luna-medium-priority": {
-      "input": 0.2,
-      "output": 1,
-      "cache": {
-        "read": 0.02
-      }
-    },
-    "gpt-6-luna-high-priority": {
-      "input": 0.2,
-      "output": 1,
-      "cache": {
-        "read": 0.02
-      }
-    },
-    "gpt-6-luna-xhigh-priority": {
-      "input": 0.2,
-      "output": 1,
-      "cache": {
-        "read": 0.02
-      }
-    },
-    "gpt-6-luna-max-priority": {
-      "input": 0.2,
-      "output": 1,
-      "cache": {
-        "read": 0.02
-      }
-    },
     "gemini-4-carbon-medium": {
       "input": 2,
       "output": 10,
@@ -2762,42 +2380,7 @@
         "read": 0.1
       }
     },
-    "gemini-4-carbon-low": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "gemini-4-carbon-high": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.1
-      }
-    },
     "kimi-k3-1-pro-max": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "kimi-k3-1-pro-low": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "kimi-k3-1-pro-medium": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.2
-      }
-    },
-    "kimi-k3-1-pro-high": {
       "input": 2,
       "output": 10,
       "cache": {
@@ -2832,53 +2415,11 @@
         "read": 0.1
       }
     },
-    "claude-sonnet-5-5-low": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "claude-sonnet-5-5-high": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "claude-sonnet-5-5-xhigh": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.1
-      }
-    },
-    "claude-sonnet-5-5-max": {
-      "input": 2,
-      "output": 10,
-      "cache": {
-        "read": 0.1
-      }
-    },
     "gemini-3-8-flash-medium": {
       "input": 0.75,
       "output": 3.75,
       "cache": {
-        "read": 0.08
-      }
-    },
-    "gemini-3-8-flash-low": {
-      "input": 0.75,
-      "output": 3.75,
-      "cache": {
-        "read": 0.08
-      }
-    },
-    "gemini-3-8-flash-high": {
-      "input": 0.75,
-      "output": 3.75,
-      "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "claude-opus-4-7-medium": {
@@ -3056,6 +2597,69 @@
         "read": 1
       }
     },
+    "claude-opus-5-5-low": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-opus-5-5-high": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-opus-5-5-xhigh": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-opus-5-5-max": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-opus-5-5-low-fast": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-opus-5-5-medium-fast": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-opus-5-5-high-fast": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-opus-5-5-xhigh-fast": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-opus-5-5-max-fast": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
     "claude-5-fable-low": {
       "input": 10,
       "output": 50,
@@ -3126,6 +2730,69 @@
         "read": 0.25
       }
     },
+    "claude-fable-5-2-low": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-fable-5-2-high": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-fable-5-2-xhigh": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-fable-5-2-max": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "claude-fable-5-2-low-fast": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-fable-5-2-medium-fast": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-fable-5-2-high-fast": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-fable-5-2-xhigh-fast": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "claude-fable-5-2-max-fast": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.4
+      }
+    },
     "claude-sonnet-5-low": {
       "input": 2,
       "output": 10,
@@ -3159,6 +2826,34 @@
       "output": 10,
       "cache": {
         "read": 0.2
+      }
+    },
+    "claude-sonnet-5-5-low": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "claude-sonnet-5-5-high": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "claude-sonnet-5-5-xhigh": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "claude-sonnet-5-5-max": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.1
       }
     },
     "claude-haiku-5-5-low": {
@@ -3256,21 +2951,35 @@
       "input": 0.75,
       "output": 3.75,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gemini-3-7-flash-medium": {
       "input": 0.75,
       "output": 3.75,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gemini-3-7-flash-high": {
       "input": 0.75,
       "output": 3.75,
       "cache": {
-        "read": 0.08
+        "read": 0.075
+      }
+    },
+    "gemini-3-8-flash-low": {
+      "input": 0.75,
+      "output": 3.75,
+      "cache": {
+        "read": 0.075
+      }
+    },
+    "gemini-3-8-flash-high": {
+      "input": 0.75,
+      "output": 3.75,
+      "cache": {
+        "read": 0.075
       }
     },
     "gemini-4-argon-low": {
@@ -3294,32 +3003,46 @@
         "read": 0.1
       }
     },
+    "gemini-4-carbon-low": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "gemini-4-carbon-high": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.1
+      }
+    },
     "gemini-4-hydrogen-low": {
       "input": 1.5,
       "output": 7.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gemini-4-hydrogen-medium": {
       "input": 1.5,
       "output": 7.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gemini-4-hydrogen-high": {
       "input": 1.5,
       "output": 7.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gemini-4-hydrogen-xhigh": {
       "input": 1.5,
       "output": 7.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gemini-4-neon-low": {
@@ -3602,6 +3325,69 @@
         "read": 0.04
       }
     },
+    "gpt-6-2-astra-low": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-2-astra-high": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-2-astra-xhigh": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-2-astra-max": {
+      "input": 8,
+      "output": 40,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-2-astra-low-priority": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.8
+      }
+    },
+    "gpt-6-2-astra-medium-priority": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.8
+      }
+    },
+    "gpt-6-2-astra-high-priority": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.8
+      }
+    },
+    "gpt-6-2-astra-xhigh-priority": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.8
+      }
+    },
+    "gpt-6-2-astra-max-priority": {
+      "input": 16,
+      "output": 80,
+      "cache": {
+        "read": 0.8
+      }
+    },
     "gpt-6-2-sol-low": {
       "input": 2,
       "output": 10,
@@ -3670,6 +3456,146 @@
       "output": 20,
       "cache": {
         "read": 0.2
+      }
+    },
+    "gpt-6-astra-low": {
+      "input": 10,
+      "output": 50,
+      "cache": {
+        "read": 1
+      }
+    },
+    "gpt-6-astra-high": {
+      "input": 10,
+      "output": 50,
+      "cache": {
+        "read": 1
+      }
+    },
+    "gpt-6-astra-xhigh": {
+      "input": 10,
+      "output": 50,
+      "cache": {
+        "read": 1
+      }
+    },
+    "gpt-6-astra-max": {
+      "input": 10,
+      "output": 50,
+      "cache": {
+        "read": 1
+      }
+    },
+    "gpt-6-astra-low-priority": {
+      "input": 20,
+      "output": 100,
+      "cache": {
+        "read": 2
+      }
+    },
+    "gpt-6-astra-medium-priority": {
+      "input": 20,
+      "output": 100,
+      "cache": {
+        "read": 2
+      }
+    },
+    "gpt-6-astra-high-priority": {
+      "input": 20,
+      "output": 100,
+      "cache": {
+        "read": 2
+      }
+    },
+    "gpt-6-astra-xhigh-priority": {
+      "input": 20,
+      "output": 100,
+      "cache": {
+        "read": 2
+      }
+    },
+    "gpt-6-astra-max-priority": {
+      "input": 20,
+      "output": 100,
+      "cache": {
+        "read": 2
+      }
+    },
+    "gpt-6-sol-none": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "gpt-6-sol-low": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "gpt-6-sol-high": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "gpt-6-sol-xhigh": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "gpt-6-sol-max": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "gpt-6-sol-none-priority": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-sol-low-priority": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-sol-medium-priority": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-sol-high-priority": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-sol-xhigh-priority": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.4
+      }
+    },
+    "gpt-6-sol-max-priority": {
+      "input": 4,
+      "output": 20,
+      "cache": {
+        "read": 0.4
       }
     },
     "gpt-6-1-sol-low": {
@@ -3810,6 +3736,83 @@
       "output": 10,
       "cache": {
         "read": 0.1
+      }
+    },
+    "gpt-6-luna-none": {
+      "input": 0.1,
+      "output": 0.5,
+      "cache": {
+        "read": 0.01
+      }
+    },
+    "gpt-6-luna-low": {
+      "input": 0.1,
+      "output": 0.5,
+      "cache": {
+        "read": 0.01
+      }
+    },
+    "gpt-6-luna-high": {
+      "input": 0.1,
+      "output": 0.5,
+      "cache": {
+        "read": 0.01
+      }
+    },
+    "gpt-6-luna-xhigh": {
+      "input": 0.1,
+      "output": 0.5,
+      "cache": {
+        "read": 0.01
+      }
+    },
+    "gpt-6-luna-max": {
+      "input": 0.1,
+      "output": 0.5,
+      "cache": {
+        "read": 0.01
+      }
+    },
+    "gpt-6-luna-none-priority": {
+      "input": 0.2,
+      "output": 1,
+      "cache": {
+        "read": 0.02
+      }
+    },
+    "gpt-6-luna-low-priority": {
+      "input": 0.2,
+      "output": 1,
+      "cache": {
+        "read": 0.02
+      }
+    },
+    "gpt-6-luna-medium-priority": {
+      "input": 0.2,
+      "output": 1,
+      "cache": {
+        "read": 0.02
+      }
+    },
+    "gpt-6-luna-high-priority": {
+      "input": 0.2,
+      "output": 1,
+      "cache": {
+        "read": 0.02
+      }
+    },
+    "gpt-6-luna-xhigh-priority": {
+      "input": 0.2,
+      "output": 1,
+      "cache": {
+        "read": 0.02
+      }
+    },
+    "gpt-6-luna-max-priority": {
+      "input": 0.2,
+      "output": 1,
+      "cache": {
+        "read": 0.02
       }
     },
     "glm-5-2": {
@@ -4008,67 +4011,88 @@
         "read": 0.3
       }
     },
+    "kimi-k3-1-pro-low": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "kimi-k3-1-pro-medium": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
+    "kimi-k3-1-pro-high": {
+      "input": 2,
+      "output": 10,
+      "cache": {
+        "read": 0.2
+      }
+    },
     "glm-5-3-flash-low": {
       "input": 0.15,
       "output": 0.5,
       "cache": {
-        "read": 0.03
+        "read": 0.029
       }
     },
     "glm-5-3-flash-high": {
       "input": 0.15,
       "output": 0.5,
       "cache": {
-        "read": 0.03
+        "read": 0.029
       }
     },
     "glm-5-3-flash-max": {
       "input": 0.15,
       "output": 0.5,
       "cache": {
-        "read": 0.03
+        "read": 0.029
       }
     },
     "deepseek-v4-flash-high": {
       "input": 0.14,
       "output": 0.28,
       "cache": {
-        "read": 0.03
+        "read": 0.028
       }
     },
     "deepseek-v4-flash-max": {
       "input": 0.14,
       "output": 0.28,
       "cache": {
-        "read": 0.03
+        "read": 0.028
       }
     },
     "deepseek-v4-1-flash-1017-none": {
       "input": 0.22,
       "output": 0.66,
       "cache": {
-        "read": 0.01
+        "read": 0.007
       }
     },
     "deepseek-v4-1-flash-1017-low": {
       "input": 0.22,
       "output": 0.66,
       "cache": {
-        "read": 0.01
+        "read": 0.007
       }
     },
     "deepseek-v4-1-flash-1017-high": {
       "input": 0.22,
       "output": 0.66,
       "cache": {
-        "read": 0.01
+        "read": 0.007
       }
     },
     "deepseek-v4-1-flash-1017-max": {
       "input": 0.22,
       "output": 0.66,
       "cache": {
-        "read": 0.01
+        "read": 0.007
       }
     },
     "swe-1-7": {
@@ -4083,6 +4107,48 @@
       "output": 2.5,
       "cache": {
         "read": 0.2
+      }
+    },
+    "swe-2-flash-medium-lightning": {
+      "input": 1,
+      "output": 5,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "swe-2-flash-high-lightning": {
+      "input": 1,
+      "output": 5,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "swe-2-flash-max-lightning": {
+      "input": 1,
+      "output": 5,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "swe-2-medium-lightning": {
+      "input": 1,
+      "output": 5,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "swe-2-high-lightning": {
+      "input": 1,
+      "output": 5,
+      "cache": {
+        "read": 0.1
+      }
+    },
+    "swe-2-max-lightning": {
+      "input": 1,
+      "output": 5,
+      "cache": {
+        "read": 0.1
       }
     },
     "claude-opus-4-6": {
@@ -4146,41 +4212,6 @@
       "output": 15,
       "cache": {
         "read": 0.25
-      }
-    },
-    "gpt-5-4-none-priority": {
-      "input": 5,
-      "output": 30,
-      "cache": {
-        "read": 0.5
-      }
-    },
-    "gpt-5-4-low-priority": {
-      "input": 5,
-      "output": 30,
-      "cache": {
-        "read": 0.5
-      }
-    },
-    "gpt-5-4-medium-priority": {
-      "input": 5,
-      "output": 30,
-      "cache": {
-        "read": 0.5
-      }
-    },
-    "gpt-5-4-high-priority": {
-      "input": 5,
-      "output": 30,
-      "cache": {
-        "read": 0.5
-      }
-    },
-    "gpt-5-4-xhigh-priority": {
-      "input": 5,
-      "output": 30,
-      "cache": {
-        "read": 0.5
       }
     },
     "gpt-5-5-none": {
@@ -4253,32 +4284,67 @@
         "read": 1.25
       }
     },
+    "gpt-5-4-none-priority": {
+      "input": 5,
+      "output": 30,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "gpt-5-4-low-priority": {
+      "input": 5,
+      "output": 30,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "gpt-5-4-medium-priority": {
+      "input": 5,
+      "output": 30,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "gpt-5-4-high-priority": {
+      "input": 5,
+      "output": 30,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "gpt-5-4-xhigh-priority": {
+      "input": 5,
+      "output": 30,
+      "cache": {
+        "read": 0.5
+      }
+    },
     "gpt-5-4-mini-low": {
       "input": 0.75,
       "output": 4.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gpt-5-4-mini-medium": {
       "input": 0.75,
       "output": 4.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gpt-5-4-mini-high": {
       "input": 0.75,
       "output": 4.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "gpt-5-4-mini-xhigh": {
       "input": 0.75,
       "output": 4.5,
       "cache": {
-        "read": 0.08
+        "read": 0.075
       }
     },
     "claude-sonnet-4-6": {
@@ -4355,15 +4421,83 @@
       "input": 1.32,
       "output": 3.96,
       "cache": {
-        "read": 0.04
+        "read": 0.044
       }
     },
     "deepseek-v4-pro-max": {
       "input": 1.32,
       "output": 3.96,
       "cache": {
-        "read": 0.04
+        "read": 0.044
+      }
+    },
+    "swe-2-1-low-lightning": {
+      "input": 5,
+      "output": 25,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "swe-2-1-medium-lightning": {
+      "input": 5,
+      "output": 25,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "swe-2-1-lightning": {
+      "input": 5,
+      "output": 25,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "swe-2-1-high-lightning": {
+      "input": 5,
+      "output": 25,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "swe-2-1-xhigh-lightning": {
+      "input": 5,
+      "output": 25,
+      "cache": {
+        "read": 0.5
+      }
+    },
+    "swe-2-1-max-lightning": {
+      "input": 5,
+      "output": 25,
+      "cache": {
+        "read": 0.5
       }
     }
-  }
+  },
+  "noImages": [
+    "swe-2-flash-medium",
+    "glm-5-3-low",
+    "glm-5-3-high",
+    "glm-5-3-max",
+    "glm-5-2",
+    "glm-5-2-max",
+    "glm-5-2-1m",
+    "glm-5-2-max-1m",
+    "glm-5-2-none",
+    "glm-5-2-none-1m",
+    "nemotron-3-5-lightning-none",
+    "nemotron-3-5-lightning-high",
+    "deepseek-v4-flash-high",
+    "deepseek-v4-flash-max",
+    "swe-2-flash-high",
+    "swe-2-flash-max",
+    "swe-2-flash-medium-lightning",
+    "swe-2-flash-high-lightning",
+    "swe-2-flash-max-lightning",
+    "nemotron-3-ultra-none",
+    "nemotron-3-ultra-medium",
+    "nemotron-3-ultra-high",
+    "deepseek-v4-pro-high",
+    "deepseek-v4-pro-max"
+  ]
 }

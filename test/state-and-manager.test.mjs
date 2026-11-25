@@ -454,3 +454,67 @@ test('DevinController 拉取 RPC 目录后用 CLI 补全官方 Fusion 组合表'
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('DevinController persists hideLegacyModels (default true), preserves it on saveSettings, and sorts enabled models first', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'devin-legacy-filter-'));
+  try {
+    const statePath = join(dir, 'state.json');
+    // 模拟旧版 state.json（缺少 hideLegacyModels 字段）加载后应默认为 true
+    await writeFile(statePath, JSON.stringify({
+      version: 1,
+      accounts: [{ id: 'a1', label: 'A1', authMode: 'api-key', credentialStored: true }],
+      activeAccountId: 'a1',
+      enabled: true,
+      settings: { cacheKeepalive: { enabled: false, intervalSec: 285, maxPings: 6 }, serverUrl: '' },
+      catalogs: {},
+      modelSettings: { a1: { 'swe-2-1': { enabled: false } } },
+      fusion: {},
+      fastSessions: {}
+    }), 'utf8');
+
+    let onChangeCalls = 0;
+    const controller = new DevinController({
+      statePath,
+      readGrant: async () => ({ key: 'cog_k' }),
+      writeGrant: async () => {},
+      deleteGrant: async () => {}
+    });
+    controller.onChange = async () => { onChangeCalls++; };
+    await controller.store.load();
+
+    const snap0 = await controller.invoke({ op: 'read' });
+    assert.equal(snap0.settings.hideLegacyModels, true);
+    assert.ok(snap0.catalogs[0].legacyCount > 0);
+    assert.ok(snap0.catalogs[0].visibleCount < snap0.catalogs[0].count);
+    // 已停用的 swe-2-1 排在所有已启用模型之后
+    const models0 = snap0.catalogs[0].models;
+    assert.equal(models0[models0.length - 1].id, 'swe-2-1');
+    assert.equal(models0[models0.length - 1].enabled, false);
+    assert.equal(models0[0].enabled, true);
+
+    // 关闭过滤老旧模型
+    const snap1 = await controller.invoke({ op: 'setHideLegacyModels', revision: snap0.revision, enabled: false });
+    assert.equal(snap1.settings.hideLegacyModels, false);
+    assert.equal(snap1.catalogs[0].visibleCount, snap1.catalogs[0].count);
+    assert.equal(onChangeCalls, 1);
+
+    // 保存保活/服务设置时未传 hideLegacyModels 不得误覆盖回 true
+    const snap2 = await controller.invoke({
+      op: 'saveSettings',
+      revision: snap1.revision,
+      settings: { cacheKeepalive: { enabled: true, intervalSec: 240, maxPings: 5 }, serverUrl: '' }
+    });
+    assert.equal(snap2.settings.hideLegacyModels, false);
+
+    // 重新开启过滤并持久化校验
+    const snap3 = await controller.invoke({ op: 'setHideLegacyModels', revision: snap2.revision, enabled: true });
+    assert.equal(snap3.settings.hideLegacyModels, true);
+    const reloaded = new StateStore(statePath);
+    await reloaded.load();
+    assert.equal(reloaded.current.settings.hideLegacyModels, true);
+
+    controller.dispose();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

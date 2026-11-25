@@ -24,10 +24,11 @@ export const Config = z.object({
   devinCliPath: z.string().description('可选：devin CLI 原生可执行文件绝对路径').default('')
 });
 
-function routingFingerprint(routes, facts, defaults) {
+function routingFingerprint(routes, modelIds, facts, defaults) {
   return JSON.stringify([
     routes,
-    [...facts.entries()].map(([id, row]) => [id, row.enabled, row.effective]),
+    modelIds,
+    [...facts.entries()].map(([id, row]) => [id, row.enabled, row.legacy === true, row.effective]),
     [...defaults.entries()]
   ]);
 }
@@ -181,7 +182,7 @@ export function apply(ctx, config) {
 
       const facts = new Map(getModelRows(state, state.activeAccountId).map((row) => [row.id, row]));
       facts.set(FUSION_MODEL_ID, { id: FUSION_MODEL_ID, enabled: true, effective: { toolsEnabled: true } });
-      const fingerprint = routingFingerprint(routes, facts, nextDefaults) + ':fusion:' + JSON.stringify(state.fusion ?? {});
+      const fingerprint = routingFingerprint(routes, profile.models.map((m) => m.id), facts, nextDefaults) + ':fusion:' + JSON.stringify(state.fusion ?? {});
       if (registration && previous?.fingerprint === fingerprint) {
         const owner = state.accounts.find((a) => a.id === state.activeAccountId);
         controller.appliedAccount = owner
