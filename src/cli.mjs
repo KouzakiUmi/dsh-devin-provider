@@ -70,7 +70,7 @@ function normalizeCliServer(value) {
 
 export async function homeFor(key, server, cacheBase) {
   const base = cacheBase || join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'dsh-devin-provider');
-  const home = join(base, createHash('sha256').update(key).digest('hex').slice(0, 16));
+  const home = join(base, createHash('sha256').update(key).update('\0').update(server || DEFAULT_SERVER).digest('hex').slice(0, 16));
   const file = join(home, 'devin', 'credentials.toml');
   if (!existsSync(file)) {
     await mkdir(join(home, 'devin'), { recursive: true, mode: 0o700 });
@@ -172,7 +172,7 @@ export async function cliModels(home, opts) {
 }
 
 export async function cliCatalog(home, opts) {
-  const { out } = await runCLI(home, ['models', 'list', '--format', 'json'], opts);
+  const { out } = await runCLI(home, ['models', 'list', '--format', 'json', '--process-model', 'in-process'], opts);
   const catalog = parseCliCatalog(out);
   if (!catalog.families.length) throw new Error('devin models list 未返回模型');
   return catalog;

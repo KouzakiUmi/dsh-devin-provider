@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { DEFAULT_SERVER } from './pb.mjs';
+import { CLI_VERSION, DEFAULT_SERVER } from './pb.mjs';
 import {
   ROUTE_ID,
   StateStore,
@@ -22,9 +22,7 @@ import {
   effectiveModel,
   fastModelMap,
   fetchCliModelConfigs,
-  fusionConfigOf,
-  fusionOptions,
-  fusionSupportsFast,
+  fusionCatalogOf,
   getModelRows
 } from './catalog.mjs';
 import { cliCatalog, cliIdentity, cliModels, cliPath, homeFor, readCliCredentials } from './cli.mjs';
@@ -40,12 +38,6 @@ function modelRow(state, accountId, modelId) {
   const row = getModelRows(state, accountId).find((item) => item.id === modelId);
   if (!row) throw new Error('模型不在当前目录中，请先刷新模型目录');
   return row;
-}
-
-// 对外快照只暴露可持久化字段；fastAllowed 是运行时派生值，保存时会被拒绝。
-function publicFusionConfig(state, accountId) {
-  const { fastAllowed, ...config } = fusionConfigOf(state, accountId);
-  return config;
 }
 
 const unknownAccountName = (key, server) =>
@@ -323,6 +315,14 @@ export class DevinController {
     );
 
     const activeStatus = catalogStatus(state, state.activeAccountId);
+    const fusion = fusionCatalogOf(state, state.activeAccountId);
+    const sidekickChoices = new Map(getModelRows(state, state.activeAccountId).map((row) => [row.id, row]));
+    const sidekicks = fusion.options.sidekicks.map((sidekick) => {
+      const row = sidekickChoices.get(sidekick.familyId);
+      return { ...sidekick,
+        ...(row?.enabled === false ? { unavailable: 'disabled' }
+          : row?.legacy && state.settings?.hideLegacyModels !== false ? { unavailable: 'legacy' } : {}) };
+    });
     const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
 
     return {
@@ -357,11 +357,12 @@ export class DevinController {
       fastSessionsCount: Object.keys(state.fastSessions ?? {}).length,
       fastModels: activeStatus.broken
         ? {}
-        : fastModelMap(activeStatus.families, { fusionFast: fusionSupportsFast(state, state.activeAccountId) }),
+        : fastModelMap(activeStatus.families, { fusionFast: fusion.selection?.fastAllowed }),
       fusion: {
-        config: publicFusionConfig(state, state.activeAccountId),
-        options: fusionOptions(state, state.activeAccountId),
-        perAccount: Object.fromEntries(state.accounts.map((a) => [a.id, publicFusionConfig(state, a.id)]))
+        config: fusion.selection?.config ?? {},
+        options: { ...fusion.options, sidekicks },
+        perAccount: Object.fromEntries(state.accounts.map((a) => [a.id,
+          (a.id === state.activeAccountId ? fusion : fusionCatalogOf(state, a.id)).selection?.config ?? {}]))
       },
       login: this.oauth.status()
     };
@@ -458,7 +459,7 @@ export class DevinController {
                     const idx = next.accounts.findIndex((a) => a.id === accountId);
                     if (idx >= 0) next.accounts[idx] = account({ ...next.accounts[idx], identity: nextId });
                     return next;
-                  });
+                  }, { signal: this.life.signal });
                 });
                 this.operations = syncIdentity.catch(() => {});
               }
@@ -705,7 +706,7 @@ export class DevinController {
         }
       }
       // GetCliModelConfigs 不含 Fusion 组合路由；官方组合表只出现在 `devin models list` 中。
-      // RPC 目录未带组合表时补一次 CLI 读取；CLI 不可用时保留 RPC 目录，Fusion 搭配退回静态表。
+      // RPC 目录未带组合表时补一次 CLI 读取；失败则保留同一服务上次成功获取的组合表。
       if (!Array.isArray(catalog.fusionRoutes) || !catalog.fusionRoutes.length) {
         if (cliPath(this.devinCliPath)) {
           try {
@@ -716,8 +717,16 @@ export class DevinController {
             const cliFusion = Array.isArray(cliResult) ? [] : (cliResult?.fusionRoutes ?? []);
             if (cliFusion.length) catalog = { ...catalog, fusionRoutes: cliFusion };
           } catch {
-            // 保留主目录；组合校验退回静态表。
+            // CLI 不可用时保留 RPC 目录。
           }
+        }
+      }
+      if (catalog.fusionRoutes?.length) {
+        catalog = { ...catalog, fusionRoutesVersion: CLI_VERSION, fusionServer: cred.server };
+      } else {
+        const previous = this.store.current.catalogs[accountId];
+        if (previous?.fusionRoutesVersion === CLI_VERSION && previous.fusionServer === cred.server) {
+          catalog = { ...catalog, fusionRoutes: previous.fusionRoutes, fusionRoutesVersion: CLI_VERSION, fusionServer: cred.server };
         }
       }
       await this.store.mutate(request.revision, (next) => {

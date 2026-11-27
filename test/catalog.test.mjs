@@ -64,7 +64,8 @@ test('variantFor resolves family id, DSH off->none, nearest effort, and fast tie
   assert.equal(fastMap['swe-2-1']?.tier, 'lightning');
   assert.deepEqual(fastMap['swe-2-1']?.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.equal(fastMap['swe-2']?.tier, 'lightning');
-  assert.equal(fastMap['swe-2']?.label, 'Lightning');
+  assert.equal(fastMap['swe-2']?.label, 'Ultrafast');
+  assert.equal(fastMap['swe-2-1']?.label, 'Ultrafast');
   assert.equal(fastMap['swe-2-flash']?.tier, 'lightning');
   assert.equal(fastMap['claude-opus-5-5']?.tier, 'fast');
   assert.equal(fastMap['gpt-6-astra']?.tier, 'priority');

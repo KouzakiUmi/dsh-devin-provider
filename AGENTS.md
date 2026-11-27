@@ -49,22 +49,20 @@
 - 声明 `engines.dsh`，安装器对不兼容 Core 拒绝安装；CI 检查任务改为先构建再检查；`verify-package.py` 开发机路径校验覆盖无尾分隔符形式。
 - 文档修正首次发布说明（`createPackage` + OIDC），README 与开发文档改为事实陈述。
 
-## Fusion 支持与读缓存中间层（0.1.3 发布）
+## Fusion 支持与读缓存中间层
 
 ### Fusion（lead + sidekick 路由家族）
-- **协议照抄本机 Devin CLI**（3000.14.30821 实测抓包确认）：组合路由 uid `fusion-<leadUid>-sidekick-<sidekickUid>`（如 `fusion-claude-fable-5-2-high-sidekick-swe-2-high`）→ `AssignModel`（unary proto，`application/proto`，field 2=routerUid、3=cascadeId、5=当前用户轮）→ 返回 **lead 的 modelUid + assignmentJwt** → `GetChatMessage` 以 field 21=lead uid、field 26=JWT、field 16=同一 cascadeId 发出；服务端凭 JWT 后台编排 lead+sidekick。
-- `devin-wire.mjs`：`assignModel()`、`fusionRouterUid()`、`isFusion()`；`encodeRequest`/`buildFromPiContext` 透传 cascadeId/assignmentJwt；`streamDevinChat` 对 fusion 先分配再推理，`claude` 思考判定按分配到的 lead uid。Fast Mode 的 lead `-fast` 与 GPT sidekick `-priority` 后缀按 `fastAllowed` 决定：官方组合表没有该 lead+sidekick 的快速变体时降级为标准组合，不发出不存在的路由。
-- `state.mjs`：`state.fusion[accountId] = {lead, leadEffort, sidekick, sidekickEffort}`，`normalizeFusionConfig` 校验；默认搭配 Opus 5.5 Medium + SWE-2 Medium（`FUSION_DEFAULT`）。
-- `catalog.mjs`：官方组合表来自 `devin models list` 的 `fusion-*` 路由；`fusionRouteMatrix()` 解析出每个 lead 的标准/fast sidekick 集合与各 sidekick 档位，`fusionOptions()` 据此过滤 lead 的 sidekick 下拉并给出 `fast`/`fastSidekicks`；`fusionConfigOf()` 把旧配置或手改配置回退到官方允许的 lead/sidekick/档位组合，并返回运行时派生字段 `fastAllowed`（不持久化）。`fusionDescriptor()` 随 lead 定 api/窗口；`profileFor` 追加唯一 `fusion` 路由模型（`reasoningEfforts:false`，lead 档位由 Fusion 配置决定，不走 DSH 逐次档位）。无组合表时退回静态 lead/sidekick 表。
-- `manager.mjs`：`saveFusion` op；`op:'models'` 先拉 `GetCliModelConfigs`，RPC 目录缺 `fusionRoutes` 时用 `devin models list` 补一次（CLI 不可用则保留 RPC 目录）；read 快照含 `fusion.{config,options,perAccount}`，其中 `config` 仅含可持久化字段。`index.mjs` 路由指纹纳入 fusion 配置，lead 变更触发适配器重建；`resolveFusion` 调用时读实时状态。
-- **UI**：设置页 `FusionCard`（lead/档位/sidekick/档位四选择器，sidekick 选项按 lead 的官方搭配过滤，切换 lead 时自动修正）；`FusionPillEntry` 经 `conversation.input.right` slot 注入聊天输入区药丸（参考 subusage），devin 路由激活时显示、点击即时切换搭配；⚡ 仅当当前 lead+sidekick 存在快速组合时显示。
-- **边界**：fusion 计费按 lead/sidekick 各自费率，描述符 cost 暂置 0，实际用量以服务端 `actualModelUid` 为准（尚未接入成本回填）。
+- **协议（Devin CLI 3000.15.14）**：Lead 用 `AssignModel` field 2=组合 UID、3=cascadeId、5=用户轮，`GetChatMessage` 用 field 21=分配模型、16=cascadeId、26=assignmentJwt。CLI 通过本地工具触发 Sidekick：为子会话重新分配，`AssignModel` fields 2/6 均为组合 UID，子会话 `GetChatMessage` 用独立 cascadeId 和返回的精确副模型 UID，不复制 Lead 的 JWT。
+- **交接**：`fusion-handoff.mjs` 注册仅向 Fusion Lead 开放的 `devin_sidekick`。用 DSH 本地 `spawn` 启动独立会话，遵循子代理深度与现有工具权限，阻塞等待报告交给 Lead；工具卡、子会话与报告由 DSH 展示。插件不模拟 CLI 的后台交接和历史子会话续跑；Sidekick 绑定只在本次交接期间存在。
+- **目录**：`fusion-routes.mjs` 以四元组索引标准 UID 和快速 UID，禁止合成未列出的路由；`catalog.mjs` 将其投影为 `fusion.{config,options,perAccount}` 的配置及选项。`profileFor` 仅在有合法组合时暴露 Fusion，描述符随标准 Lead 变体；适配器按已应用的账号和组合固化一代路由，会话快速开关仍实时读取。默认搭配 Opus 5.5 Medium + SWE-2 Medium。
+- **缓存**：`op:'models'` 优先 `GetCliModelConfigs`，再用 `devin models list` 补组合。新版缓存按协议版本及服务地址校验，暂时拉不到时复用同版本、同服务的上次结果。没有匹配缓存时，官方服务使用内置的 438 条组合（255 标准、183 快速）与账号目录交集；自定义服务使用自身组合。
+- **UI**：设置页与聊天药丸共用依赖式选择器；副模型及档位按当前主模型档位过滤，快速模式只对精确搭配显示。Lead 与 Sidekick 仍分别由 Devin 计费。
 
 ### 读缓存中间层（解耦上游拉取与 Client 读取）
 - **读路径**：`op:'quota'` 即时返回缓存快照（附 `refreshing`/`stale`），绝不阻塞等上游；无缓存时返回 `state:'loading'` 占位。
 - **刷新路径**：`startQuotaRefresh()` 后台拉上游回填缓存（inflight 去重）；`startBackgroundRefresh()` 每 30s 检查活跃账号缓存 TTL（ok 60s / 其它 15s）按需保暖，`dispose` 清理定时器。
 - **Client**：`pullQuota` 即时显示缓存，`refreshing` 时 800ms 廉价重读（30s 上限）；60s 轮询改为读缓存不强制上游；`QuotaWindows` 增 loading/刷新中指示。
-- 验收：`test/fusion.test.mjs` 19 项（协议组合/AssignModel 解析/field16/26/官方组合矩阵与 fast 限制/配置回退/fast 降级/目录动态选项/状态校验/profile 追加）；`state-and-manager` 增补 CLI 补全 `fusionRoutes` 测试；全量 53 项（52 通过、1 项既有跳过）、build + Client 边界/导入闭包检查通过。官方 995 条路由与 UI 可生成组合逐条相等（脚本核验）。
+- Fusion 验收覆盖目录全量精确 UID、档位联动、CLI 补全、Sidekick 分配、子会话报告和取消清理；在线协议与 DSH Core 分别验证。
 
 ### 插件审查结论（全模块）
 - pb/wire/adapter/index/catalog/state/manager/quota/keepalive/lease/defaults/oauth/cli/client 均已审查：凭据脱敏、accountId/路径穿越防护、PKCE state 校验、回调仅绑 127.0.0.1、HTML 转义、CLI spawn 无注入 + 隔离 home、状态锁 + 原子写齐全，未发现关键缺陷。
@@ -72,6 +70,6 @@
 
 ## SWE-2.1 同步与老旧模型过滤 / 已启用置顶
 
-- **Devin CLI 与 SWE-2.1**：本机 `devin` CLI 已为最新 `3000.14.30821`；SWE-2.1（`swe-2-1`，256K/64K、图片输入、5 档免费标准变体 + 5 档收费 Lightning 变体）已由服务端下发。同步更新 `src/pb.mjs` 的 `CLI_VERSION` 至 `3000.14.30821` 与 `src/catalog-snapshot.json`（54 家族、12 个免费变体、14 个官方推荐家族 `recommendedIds`）。
+- **Devin CLI 与 SWE-2.1**：以 `3000.15.14` 对照，普通目录的 54 家族、318 变体、12 个免费变体及 14 个推荐家族与已有模型快照一致。SWE-2.1（256K/64K、图片输入）的快速档展示官方名称 Ultrafast，路由仍使用 `-lightning` 后缀。
 - **老旧模型过滤（默认开启，双端生效）**：`parseRecommended()` 从 `GetCliModelConfigs` protobuf 的 field 11（`ClientModelConfig.is_recommended`）解析官方推荐家族；旧缓存或 CLI fallback 回退到 `SNAPSHOT_RECOMMENDED`，自定义私服无命中时不误清空列表。`state.settings.hideLegacyModels` 默认 `true`（旧版 `state.json` 缺该字段时自动回退为 `true`），通过 `setHideLegacyModels` RPC 原子切换；`saveSettings` 未传该字段时保留现值。开启时 `profileFor`、`captureModelDefaults` 与设置页模型列表同步隐藏老旧模型，并把 `profile.models` ID 序列纳入 `index.mjs` 路由指纹以即时重建适配器。
 - **已启用模型置顶**：`getModelRows()` 与 `src/client.js` 均对模型列表执行稳定排序，确保已启用模型始终排在已停用模型前面且各自保持原序；设置页模型搜索栏右侧新增「过滤老旧模型」默认开启开关，关闭后老旧模型带「老旧」标签，搜索仅命中老旧模型时提供一键显示入口。

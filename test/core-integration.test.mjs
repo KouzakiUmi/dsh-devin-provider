@@ -71,6 +71,9 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
       profile,
       facts,
       resolveCredential: async () => ({ key: 'cog_test_token', server: 'https://server.codeium.com' }),
+      resolveSidekickRun: (sid, id) => sid === 'sidekick-session' && id === 'swe-2-1'
+        ? { modelUid: 'swe-2-1-medium', cascadeId: 'sidekick-cascade' }
+        : undefined,
       keepalive: { enabled: false },
       fetchImpl: mockFetch
     }
@@ -78,7 +81,9 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
 
   // 1. listModels & resolveModel
   const models = await adapter.listModels('devin');
-  assert.ok(models.length > 30);
+  assert.ok(models.some((model) => model.id === 'fusion'));
+  assert.ok(models.some((model) => model.id === 'swe-2-1'));
+  assert.equal(models.some((model) => model.id === 'claude-opus-4.6'), false);
   const resolved = await adapter.resolveModel('devin', 'gpt-6-sol');
   assert.ok(resolved.reasoning.efforts.some((e) => e.id === 'off'));
 
@@ -112,6 +117,16 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
   const toolFields = sweFields.filter((f) => f.num === 10);
   assert.equal(toolFields.length, 1);
   assert.equal(dec.decode(fields(toolFields[0].data).find((x) => x.num === 1).data), 'read');
+
+  // 2c. Actual Core passes the DSH child session id to the adapter; use the assigned UID verbatim.
+  const prepSidekick = await adapter.prepareCall('devin', 'swe-2-1');
+  for await (const _ of prepSidekick.stream({
+    provider: 'devin', model: 'swe-2-1', sessionId: 'sidekick-session', reasoningEffort: 'high',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }]
+  })) {}
+  const childFields = fields(lastRequestPb);
+  assert.equal(dec.decode(childFields.find((f) => f.num === 21).data), 'swe-2-1-medium');
+  assert.equal(dec.decode(childFields.find((f) => f.num === 16).data), 'sidekick-cascade');
 
   assert.ok(chunks.some((c) => c.type === 'reasoning-delta' && c.text === 'thinking...'));
   assert.ok(chunks.some((c) => c.type === 'text-delta' && c.text === 'Hello from Devin!'));
@@ -167,4 +182,28 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
   const devinPkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const runtimeVersion = boot.getDshRuntimeVersion(process.env.DSH_INSTALL_DIR);
   assert.equal(boot.evaluatePluginCompatibility(devinPkg, {}, runtimeVersion), undefined);
+});
+
+test('Real DSH Core registers the raw Fusion Sidekick tool schema and resolves it only for Fusion', { skip: !hasDshRuntime }, async () => {
+  const { Context } = await import('@deepseek-ai/cordis');
+  const { ToolsService } = await import('@deepseek-ai/dsh-tools');
+  const { registerFusionHandoff } = await import('../src/fusion-handoff.mjs');
+  const root = new Context();
+  const { SystemPrompt } = await import('@deepseek-ai/dsh-system-prompt');
+  new SystemPrompt(root, {});
+  const tools = new ToolsService(root);
+  const parent = { id: 'test-agent' };
+  const unregister = registerFusionHandoff({ tools, subagents: {
+    getProvider: () => ({ capabilities: { agentOptions: true, depthLimit: true } })
+  } }, { live: () => ({ fusion: {} }), runs: new Map(), resolveCredential: () => undefined });
+  try {
+    for (const model of ['fusion', 'swe-2-1']) {
+      const step = await tools.resolve({ agent: parent, modelSelection: { provider: 'devin', model }, signal: new AbortController().signal });
+      try {
+        const tool = step.view(parent).get('devin_sidekick');
+        assert.equal(Boolean(tool), model === 'fusion');
+        if (tool) assert.deepEqual(tool.parameters.required, ['message']);
+      } finally { step.dispose(); }
+    }
+  } finally { unregister(); }
 });

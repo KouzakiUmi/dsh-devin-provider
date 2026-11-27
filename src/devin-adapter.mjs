@@ -142,6 +142,7 @@ export function createDevinAdapter(deps, config) {
     const runStream = (model, context, options) => {
       const modelCtrl = controls.get(model.id);
       const rawEffort = control?.reasoningEffort;
+      const sessionId = options?.sessionId ?? control?.sessionId;
       const mappedEffort = rawEffort !== undefined && modelCtrl?.effortsMap
         ? modelCtrl.effortsMap[rawEffort] ?? rawEffort
         : undefined;
@@ -161,7 +162,8 @@ export function createDevinAdapter(deps, config) {
         requestedEffort: mappedEffort,
         keepaliveConfig: config.keepaliveConfig?.() ?? config.keepalive,
         fusionConfig: config.resolveFusion,
-        fastMode: (opts) => (typeof config.resolveFastMode === 'function' ? config.resolveFastMode(opts?.sessionId ?? control?.sessionId) : Boolean(config.fastMode)),
+        sidekickRun: config.resolveSidekickRun?.(sessionId, model.id),
+        fastMode: () => (typeof config.resolveFastMode === 'function' ? config.resolveFastMode(sessionId) : Boolean(config.fastMode)),
         fetchImpl: config.fetchImpl ?? fetch
       });
     };

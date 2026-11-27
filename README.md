@@ -54,6 +54,7 @@ dsh plugin --profile web add "<tarball 的绝对路径>"
    - 按模型家族折叠展示（如 `swe-2`、`claude-opus-5-5`、`gpt-6-sol`），保留 `-fast`/`-priority` 等加速档位与无思考变体，并由 DSH 思考档位自动映射到对应变体 ID（含 DSH `off` ↔ Devin `none` 映射）。
    - 支持从 `GetCliModelConfigs`（及 `devin models list` 回退）同步账号实时模型目录。
    - 支持逐模型启用/停用，以及覆盖 `contextWindow`、`maxTokens`、`temperature`、`imageInput`、`toolsEnabled`、`reasoningEfforts` 与 `defaultReasoning`，并支持一键恢复默认。
+   - **Fusion**：从官方组合中选择 Lead 和 Sidekick。Lead 需要委派时，聊天显示交接卡片，并可打开 Sidekick 子会话查看工作过程；完成后 Lead 收到报告。交接需要 DSH 的本地 `spawn` 子代理后端，且副模型须在当前模型列表启用。
 4. **5 分钟提示词缓存保活（默认关闭）**
    - 可在「设置 → Devin Provider」开启或调整保活间隔（30–299 秒，默认 285 秒）和单次对话最大保活次数（1–50 次，默认 6 次）。
    - 每次有效缓存命中/写入后按周期发送 `max_tokens=1` 的 `continue` 续命请求，遇新请求、401/402/429、连续 2 次缓存未命中或达到最大次数自动停止。
@@ -66,6 +67,7 @@ dsh plugin --profile web add "<tarball 的绝对路径>"
 - `src/pb.mjs`：手写 Protobuf 编解码、Connect 帧封装（>8 KiB 自动 gzip）与错误映射
 - `src/keepalive.mjs`：5 分钟提示词缓存保活调度器
 - `src/catalog.mjs` / `src/catalog-snapshot.json`：模型家族折叠、能力快照与逐模型覆盖解析
+- `src/fusion-routes.mjs` / `src/fusion-handoff.mjs`：精确 Fusion 组合索引与 DSH Sidekick 交接工具
 - `src/state.mjs`：带文件锁与 revision 校验的状态持久化（仅存非密钥元数据）
 - `src/manager.mjs` / `src/oauth.mjs` / `src/quota.mjs` / `src/cli.mjs`：控制器、PKCE 登录、额度解析与 CLI 读取
 - `src/client.js`：DSH 设置页（`settings.section` / `devin-provider`）

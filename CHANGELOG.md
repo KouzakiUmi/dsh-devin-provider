@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.1.5
+
+- 同步 Devin CLI `3000.15.14`：内置 438 条 Fusion 组合，新增 Gemini 4 Neon 主模型与 SWE-2.1 副模型。设置页与聊天面板按主模型档位筛选副模型及其档位，只在当前搭配存在快速变体时显示 ⚡。
+- Fusion 需要委派时，通过 DSH 启动副模型子会话。聊天先显示「正在交接给 Sidekick」，完成后显示实际副模型名称，报告交回 Lead 审查。
+- SWE 系列的快速模式名称与当前 Devin 目录对齐为 Ultrafast，实际路由仍使用 `-lightning`。
+- 修复额度后台身份同步与插件卸载交错时的状态锁竞争。
+
 ## 0.1.4
 
 - 同步 Devin 最新模型目录（含 SWE-2.1、`claude-fable-5-2`、`gpt-6-2-astra`、`gemini-4-carbon`、`kimi-k3-1-pro` 等），更新 `CLI_VERSION` 至 `3000.14.30821`。

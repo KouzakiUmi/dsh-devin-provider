@@ -751,34 +751,12 @@ function parseArgsWithError(raw) {
   }
 }
 
-// ── Fusion 路由（lead + sidekick，服务端编排）─────────────────────────────────
+// ── Fusion 路由（Lead 和 Sidekick 独立分配，Host 管理交接）────────────────────────
 // 照抄本机 Devin CLI：组合路由 uid `fusion-<leadUid>-sidekick-<sidekickUid>`，
 // 先经 AssignModel（unary proto）解析出 lead 的 modelUid 与授权 JWT，
 // GetChatMessage 再以 lead uid + field 26 JWT + 同一 cascadeId 发出。
 export const FUSION_MODEL_ID = 'fusion';
 export const isFusion = (id) => String(id ?? '').toLowerCase() === FUSION_MODEL_ID;
-const GPT_PRIORITY_SIDEKICKS = new Set(['gpt-5-6-luna', 'gpt-5-6-sol', 'gpt-6-luna', 'gpt-6-1-terra']);
-
-export function fusionRouterUid(config) {
-  const leadRaw = String(config?.lead ?? '').trim();
-  const sidekickRaw = String(config?.sidekick ?? '').trim();
-  if (!leadRaw || !sidekickRaw) throw new Error('Fusion 需要同时配置 lead 与 sidekick 模型');
-  const norm = (s) => s.replace(/\.(?=\d)/g, '-');
-  const lead = norm(leadRaw);
-  const sidekick = norm(sidekickRaw);
-  const leadEffort = config?.leadEffort;
-  const sidekickEffort = config?.sidekickEffort;
-  // fastAllowed=false 表示当前 lead+sidekick 组合在官方路由表中没有快速变体：
-  // 即使会话开关残留，也不追加 -fast，避免发出不存在的组合路由。
-  const fastMode = config?.fastMode === true && config?.fastAllowed !== false;
-  // 组合格式：fusion-<leadUid>-sidekick-<sidekickUid>
-  // Fast Mode: Lead 追加 `-fast`；官方路由表中 GPT Sidekick 需同步追加 `-priority`，SWE / Claude / GLM Sidekick 保持原后缀。
-  const leadUid = `${lead}${leadEffort ? `-${leadEffort}` : ''}${fastMode ? '-fast' : ''}`;
-  const sidekickPriority = fastMode && GPT_PRIORITY_SIDEKICKS.has(sidekick);
-  const sidekickUid = `${sidekick}${sidekickEffort ? `-${sidekickEffort}` : ''}${sidekickPriority ? '-priority' : ''}`;
-  return `fusion-${leadUid}-sidekick-${sidekickUid}`;
-}
-
 function lastUserPromptText(context) {
   const msgs = context?.messages ?? [];
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -791,14 +769,15 @@ function lastUserPromptText(context) {
   return '';
 }
 
-export async function assignModel({ key, server, routerUid, cascadeId, promptText, fetchImpl = fetch, signal }) {
-  const prompt = new PB().str(1, '').varint(2, USER).str(3, promptText || '').done();
-  const req = new PB().bytes(1, metadata(key).done()).str(2, routerUid).str(3, cascadeId).bytes(5, prompt).done();
+export async function assignModel({ key, server, routerUid, cascadeId, promptText, sidekick = false, fetchImpl = fetch, signal }) {
+  const req = new PB().bytes(1, metadata(key).done()).str(2, routerUid).str(3, cascadeId);
+  if (sidekick) req.str(6, routerUid);
+  else req.bytes(5, new PB().str(1, '').varint(2, USER).str(3, promptText || '').done());
   const res = await fetchImpl(server + ASSIGN_MODEL_RPC, {
     method: 'POST',
     headers: { 'Content-Type': 'application/proto', 'Connect-Protocol-Version': '1', Authorization: 'Basic ' + key },
-    body: req,
-    signal
+    body: req.done(),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000)
   });
   const buf = new Uint8Array(await res.arrayBuffer());
   if (!res.ok) {
@@ -834,6 +813,7 @@ export function streamDevinChat({
   requestedEffort,
   keepaliveConfig,
   fusionConfig,
+  sidekickRun,
   fastMode = false,
   fetchImpl = fetch
 }) {
@@ -871,6 +851,9 @@ export function streamDevinChat({
       const key = cred?.key;
       const server = cred?.server;
       if (!key) return failStream(401, 'Devin 尚未登录');
+      if (sidekickRun?.providerServer && sidekickRun.providerServer !== server) {
+        return failStream(400, 'Devin 服务地址已变更，请重新交接 Sidekick');
+      }
 
       const ka = keepaliveSettings(keepaliveConfig);
       const kaId = ka.enabled ? keepaliveKey(context, options) : '';
@@ -881,11 +864,12 @@ export function streamDevinChat({
       let uid = variantFor(families, model.id, effort, { fast });
       let cascadeId = '';
       let assignmentJwt = '';
-      if (isFusion(model.id)) {
-        const rawCfg = typeof fusionConfig === 'function' ? await fusionConfig(options) : fusionConfig;
-        const wantFast = Boolean(rawCfg?.fastMode || fast);
-        const cfg = { ...(rawCfg ?? {}), fastMode: wantFast && rawCfg?.fastAllowed !== false };
-        const routerUid = fusionRouterUid(cfg);
+      if (sidekickRun) {
+        ({ modelUid: uid, cascadeId } = sidekickRun);
+      } else if (isFusion(model.id)) {
+        const selection = typeof fusionConfig === 'function' ? await fusionConfig(options) : fusionConfig;
+        const routerUid = ((selection?.fastMode || fast) && selection?.fastRouteUid) || selection?.routeUid;
+        if (!routerUid) return failStream(400, '当前目录暂无可用的 Fusion 搭配');
         cascadeId = randomUUID();
         let assignment;
         try {
@@ -932,8 +916,6 @@ export function streamDevinChat({
       }
 
       const source = eventsWithCleanup(prepend(first.value, fr), uid, offeredToolNames);
-      let actualModelUid = '';
-      let pricing = {};
       const head = await source.next();
       if (head.done) return failStream(502, '空回复');
       if (head.value.error) {

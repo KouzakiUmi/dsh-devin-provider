@@ -1119,52 +1119,44 @@ function fusionOptionName(opts, id) {
 }
 
 function fusionRoleState(options, draft, setDraft) {
-  const leads = Array.isArray(options?.leads) ? options.leads : [];
-  const allSidekicks = Array.isArray(options?.sidekicks) ? options.sidekicks : [];
-  const leadObj = leads.find((l) => l.id === draft?.lead) ?? null;
-  const sidekicksForLead = (leadId) => {
-    const lead = leads.find((l) => l.id === leadId);
-    const allowed = Array.isArray(lead?.sidekicks) && lead.sidekicks.length ? lead.sidekicks : null;
-    return allowed ? allSidekicks.filter((s) => allowed.includes(s.id)) : allSidekicks;
+  const leads = options?.leads ?? [];
+  const leadObj = leads.find((l) => l.id === draft.lead);
+  const variantOf = (lead, effort) => lead?.variants?.find((v) => v.effort === effort);
+  const variant = variantOf(leadObj, draft.leadEffort ?? '');
+  const choices = variant?.sidekicks ?? [];
+  const choice = choices.find((s) => s.id === draft.sidekick);
+  const setCombination = (lead, effort, sidekick) => {
+    const list = variantOf(lead, effort)?.sidekicks ?? [];
+    const next = list.find((s) => s.id === sidekick) ?? list[0];
+    const kept = next?.id === draft.sidekick ? draft.sidekickEffort : undefined;
+    setDraft((p) => ({ ...p, lead: lead?.id ?? '', leadEffort: effort, sidekick: next?.id ?? '',
+      sidekickEffort: next?.efforts.includes(kept) ? kept : fusionPickEffort(next?.efforts ?? []) }));
   };
-  const sidekicks = sidekicksForLead(leadObj?.id);
-  const sidekickObj = sidekicks.find((s) => s.id === draft?.sidekick) ?? null;
-  const fastSidekicks = Array.isArray(leadObj?.fastSidekicks) ? leadObj.fastSidekicks : null;
-  const sidekickSupportsFast = Boolean(leadObj?.fast)
-    && (fastSidekicks ? fastSidekicks.includes(sidekickObj?.id) : true);
-  const keepSidekick = (leadId, current) => {
-    const list = sidekicksForLead(leadId);
-    return list.some((s) => s.id === current) ? current : (list[0]?.id ?? '');
-  };
-  const set = (patch) => setDraft((p) => ({ ...p, ...patch }));
+  const effortOptions = (xs) => xs.length === 1 && xs[0] === '' ? [] : xs.map((e) => ({ id: e, name: e || '默认' }));
   return {
     leads,
-    sidekicks,
-    leadObj,
-    sidekickObj,
-    sidekickSupportsFast,
-    leadEfforts: (leadObj?.efforts ?? []).map((e) => ({ id: e, name: e })),
-    sidekickEfforts: (sidekickObj?.efforts ?? []).map((e) => ({ id: e, name: e })),
+    sidekicks: choices.map(({ id }) => {
+      const model = options?.sidekicks?.find((s) => s.id === id);
+      const suffix = model?.unavailable === 'legacy' ? '（需显示老旧模型）'
+        : model?.unavailable === 'disabled' ? '（未启用）' : '';
+      return { id, name: `${model?.name || id}${suffix}` };
+    }),
+    sidekickSupportsFast: choice?.fastEfforts.includes(draft.sidekickEffort ?? ''),
+    leadEfforts: effortOptions(leadObj?.variants?.map((v) => v.effort) ?? []),
+    sidekickEfforts: effortOptions(choice?.efforts ?? []),
     setLead: (v) => {
-      const side = keepSidekick(v, draft?.sidekick);
-      const obj = sidekicksForLead(v).find((s) => s.id === side);
-      const keptEffort = side === draft?.sidekick && draft?.sidekickEffort;
-      set({
-        lead: v,
-        leadEffort: fusionPickEffort(leads.find((l) => l.id === v)?.efforts ?? []),
-        sidekick: side,
-        sidekickEffort: keptEffort && (obj?.efforts ?? []).includes(keptEffort) ? keptEffort : fusionPickEffort(obj?.efforts ?? [])
-      });
+      const lead = leads.find((l) => l.id === v);
+      setCombination(lead, fusionPickEffort(lead?.variants?.map((item) => item.effort) ?? []), draft.sidekick);
     },
-    setLeadEffort: (v) => set({ leadEffort: v }),
-    setSidekick: (v) => set({ sidekick: v, sidekickEffort: fusionPickEffort(allSidekicks.find((s) => s.id === v)?.efforts ?? []) }),
-    setSidekickEffort: (v) => set({ sidekickEffort: v })
+    setLeadEffort: (v) => setCombination(leadObj, v, draft.sidekick),
+    setSidekick: (v) => setCombination(leadObj, draft.leadEffort ?? '', v),
+    setSidekickEffort: (v) => setDraft((p) => ({ ...p, sidekickEffort: v }))
   };
 }
 
 function FusionCard({ fusion, disabled, onSave }) {
-  const options = fusion?.options ?? { leads: [], sidekicks: [], default: {} };
-  const saved = fusion?.config ?? options.default ?? {};
+  const options = fusion?.options ?? { leads: [], sidekicks: [] };
+  const saved = fusion?.config ?? {};
   const savedKey = JSON.stringify(saved);
   const [draft, setDraft] = react.useState(() => JSON.parse(savedKey));
   react.useEffect(() => { setDraft(JSON.parse(savedKey)); }, [savedKey]);
@@ -1173,17 +1165,13 @@ function FusionCard({ fusion, disabled, onSave }) {
   const field = (label, value, opts, onChange, placeholder) => h('label', { style: style.field },
     h('span', { style: style.label }, label),
     h('select', { style: style.input, value: value ?? '', disabled: disabled || !opts.length, onChange: (e) => onChange(e.target.value) },
-      h('option', { value: '' }, opts.length ? placeholder : '无须档位'),
+      !opts.some((o) => o.id === '') && h('option', { value: '', disabled: true }, opts.length ? placeholder : '无须档位'),
       opts.map((o) => h('option', { key: o.id, value: o.id }, o.name))));
-  const save = () => {
-    const clean = Object.fromEntries(Object.entries(draft).filter(([, v]) => v !== '' && v != null));
-    onSave(clean);
-  };
   return h('section', { className: 'ddp-group', 'aria-label': 'Fusion 搭配' },
     h(SectionHeading, {
       title: 'Fusion 协同搭配（Lead + Sidekick）',
-      description: 'Lead 负责规划推理与审查，Sidekick 负责机械实现；默认值从实时目录读取。',
-      action: h('button', { type: 'button', style: dirty ? style.primary : style.btn, disabled: disabled || !dirty, onClick: () => save() }, '保存搭配')
+      description: 'Lead 负责规划与审查；需要委派时，聊天中显示 Sidekick 交接卡片。',
+      action: h('button', { type: 'button', style: dirty ? style.primary : style.btn, disabled: disabled || !dirty, onClick: () => onSave(draft) }, '保存搭配')
     }),
     !role.leads.length && !role.sidekicks.length
       ? h('p', { style: style.muted }, '当前目录暂无可用 Fusion 模型，请先拉取模型目录。')
@@ -1898,21 +1886,20 @@ function FusionPillEntry({ client, sessionId = '', store }) {
   const leadName = fusionOptionName(options.leads, cfg.lead);
   const sidekickName = fusionOptionName(options.sidekicks, cfg.sidekick);
   const pairLabel = cfg.lead || cfg.sidekick ? `${leadName} + ${sidekickName}` : '选择搭配';
-  const cleanConfig = (obj) => Object.fromEntries(Object.entries(obj ?? {}).filter(([, v]) => v !== '' && v != null));
-  const dirty = JSON.stringify(cleanConfig(draft)) !== JSON.stringify(cleanConfig(cfg));
+  const dirty = JSON.stringify(draft) !== JSON.stringify(cfg);
 
   const toggle = () => { if (!open) { setDraft({ ...cfg }); setSaveError(''); void load(); } setOpen((p) => !p); };
   const sel = (label, value, opts, onChange) => h('label', { className: 'ddp-pop-field' },
     h('span', { className: 'ddp-pop-field-label' }, label),
     h('select', { className: 'ddp-pop-select', value: value ?? '', disabled: busy || !opts.length, onChange: (e) => onChange(e.target.value) },
-      h('option', { value: '' }, opts.length ? '—' : '无须档位'),
+      !opts.some((o) => o.id === '') && h('option', { value: '', disabled: true }, opts.length ? '—' : '无须档位'),
       opts.map((o) => h('option', { key: o.id, value: o.id }, o.name))));
   const save = async () => {
     if (!data?.accountId) return;
     setBusy(true);
     setSaveError('');
     try {
-      await client.invoke({ op: 'saveFusion', accountId: data.accountId, revision: data.revision, config: cleanConfig(draft) });
+      await client.invoke({ op: 'saveFusion', accountId: data.accountId, revision: data.revision, config: draft });
       setOpen(false);
       await load();
     } catch (error) {
@@ -1941,7 +1928,7 @@ function FusionPillEntry({ client, sessionId = '', store }) {
     ? '请先在设置中选择账号'
     : dirty
       ? '有未保存的搭配改动'
-      : '当前对话已使用 Fusion';
+      : '已选择搭配；实际交接会在聊天中显示';
 
   return h('span', { ref: wrapRef, className: 'ddp-fusion-wrap' },
     fastInfo
@@ -1987,7 +1974,7 @@ function FusionPillEntry({ client, sessionId = '', store }) {
       h('section', { className: 'ddp-pop-card', 'aria-label': 'Lead 主模型' },
         h('div', { className: 'ddp-pop-card-head' },
           h('span', { className: 'ddp-pop-card-title' }, 'Lead 主模型'),
-          h('span', { className: 'ddp-pop-card-hint' }, role.leadObj?.fast ? '支持 ⚡ Fast' : '规划与审查')),
+          h('span', { className: 'ddp-pop-card-hint' }, role.sidekickSupportsFast ? '支持 ⚡ Fast' : '规划与审查')),
         h('div', { className: 'ddp-pop-grid' },
           sel('模型', draft.lead, role.leads, role.setLead),
           sel('档位', draft.leadEffort, role.leadEfforts, role.setLeadEffort))),

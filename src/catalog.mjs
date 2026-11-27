@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { MODEL_CONFIGS_RPC, PB, dec, fields, metadata } from './pb.mjs';
+import { CLI_VERSION, DEFAULT_SERVER, MODEL_CONFIGS_RPC, PB, dec, fields, metadata } from './pb.mjs';
 import { CORE_THINKING_LEVELS, FUSION_MODEL_ID, ROUTE_DISPLAY_NAME, ROUTE_ID, assertModelId } from './state.mjs';
+import { fusionRouteIndex, parseFusionRoute, selectFusionRoute } from './fusion-routes.mjs';
 
 export const snapshotData = JSON.parse(await readFile(new URL('./catalog-snapshot.json', import.meta.url), 'utf8'));
 
@@ -19,6 +20,7 @@ export const SNAPSHOT_FAMILIES = familiesOf(snapshotData.families);
 export const SNAPSHOT_FREE = Array.isArray(snapshotData.freeIds) ? snapshotData.freeIds : [];
 export const SNAPSHOT_RECOMMENDED = Array.isArray(snapshotData.recommendedIds) ? snapshotData.recommendedIds : [];
 export const SNAPSHOT_PRICES = snapshotData.prices && typeof snapshotData.prices === 'object' ? snapshotData.prices : {};
+export const SNAPSHOT_FUSION_ROUTES = snapshotData.fusionRoutes;
 const NO_IMAGES = new Set(snapshotData.noImages);
 export const SNAPSHOT_IMAGES = Object.fromEntries(
   snapshotData.families.flatMap(([, , , vs]) => vs.map(([id]) => [id, !NO_IMAGES.has(id)]))
@@ -42,6 +44,8 @@ const TIERS = [
 ];
 const FAST_TIERS = ['lightning', 'fast', 'priority'];
 const FAST_TIER_LABELS = { lightning: 'Lightning', fast: 'Fast', priority: 'Fast' };
+const fastLabelOf = (tier, models) => tier === 'lightning' && models.some((m) => /\bUltrafast\b/i.test(m?.name))
+  ? 'Ultrafast' : FAST_TIER_LABELS[tier] || 'Fast';
 const FAST_ID_SUFFIX_RE = /-(?:lightning|fast|priority)(?:-(?:none|minimal|min|low|medium|high|xhigh|max))?$/i;
 
 export const isFastVariantId = (id) => FAST_ID_SUFFIX_RE.test(String(id ?? ''));
@@ -150,13 +154,13 @@ export function fastModelMap(families, { fusionFast = false } = {}) {
     if (directTier) {
       const ls = efforts(f, directTier);
       if (ls.length) {
-        out[f.uid] = { tier: directTier, label: FAST_TIER_LABELS[directTier] || 'Fast', efforts: ls };
+        out[f.uid] = { tier: directTier, label: fastLabelOf(directTier, f.models), efforts: ls };
         continue;
       }
     }
     const sib = fastSiblingOf(families, f);
     if (sib) {
-      out[f.uid] = { tier: sib.tier, label: FAST_TIER_LABELS[sib.tier] || 'Fast', efforts: efforts(sib.family, '') };
+      out[f.uid] = { tier: sib.tier, label: fastLabelOf(sib.tier, sib.family.models), efforts: efforts(sib.family, '') };
     }
   }
   if (fusionFast) {
@@ -272,7 +276,7 @@ export function listed(families, images = {}, free = new Set(), prices = new Map
     const cf = costFlags(ids);
     return {
       fastTier: ft,
-      fastLabel: FAST_TIER_LABELS[ft] || 'Fast',
+      fastLabel: fastLabelOf(ft, directTier ? f.models : sib.family.models),
       ...(cf.cost ? { fastCost: cf.cost } : {}),
       ...(cf.mixedCost ? { fastMixedCost: true } : {})
     };
@@ -388,7 +392,7 @@ export function parseRecommended(b) {
     if (!recommended || !uid) continue;
     const id = fam || famLabel || name || uid;
     const low = id.toLowerCase();
-    if (low === 'adaptive' || low === 'fusion') continue;
+    if (low === 'adaptive' || low === 'fusion' || parseFusionRoute(uid)) continue;
     out.add(id);
   }
   return out;
@@ -448,7 +452,7 @@ export function parseConfigFamilies(b) {
     if (!uid) continue;
     const id = fam || famLabel || name || uid;
     const low = id.toLowerCase();
-    if (low === 'adaptive' || low === 'fusion') continue;
+    if (low === 'adaptive' || low === 'fusion' || parseFusionRoute(uid)) continue;
     let e = fams.get(id);
     if (!e) {
       const known = snapshotData.families.find(([u]) => u === id);
@@ -489,24 +493,16 @@ export function parseFamilies(text) {
 }
 
 export function parseFusionRoutesFromConfig(b) {
-  const routes = [];
-  const seen = new Set();
+  const routes = new Set();
   for (const f of fields(b)) {
     if (f.num !== 1 || f.wire !== 2) continue;
-    let uid = '';
-    let fam = '';
     for (const g of fields(f.data)) {
-      if (g.num === 22 && g.wire === 2) uid = dec.decode(g.data);
-      else if (g.num === 23 && g.wire === 2) {
-        for (const h of fields(g.data)) if (h.num === 23 && h.wire === 2) fam = dec.decode(h.data);
-      }
-    }
-    if (uid && fam.toLowerCase() === 'fusion' && uid.startsWith('fusion-') && !seen.has(uid)) {
-      seen.add(uid);
-      routes.push(uid);
+      if (g.num !== 22 || g.wire !== 2) continue;
+      const uid = dec.decode(g.data);
+      if (parseFusionRoute(uid)) routes.add(uid);
     }
   }
-  return routes;
+  return [...routes];
 }
 
 export function parseCostSummary(text) {
@@ -537,9 +533,9 @@ export function parseCliCatalog(text) {
     if (!f?.family_uid) continue;
     const low = String(f.family_uid).toLowerCase();
     if (low === 'fusion') {
-      for (const v of f.variants ?? []) {
+      for (const v of Array.isArray(f.variants) ? f.variants : []) {
         const uid = v?.model_uid;
-        if (typeof uid === 'string' && uid.startsWith('fusion-') && !seenFusion.has(uid)) {
+        if (parseFusionRoute(uid) && !seenFusion.has(uid)) {
           seenFusion.add(uid);
           fusionRoutes.push(uid);
         }
@@ -689,7 +685,8 @@ export function catalogStatus(state, accountId) {
       : [];
     const recommendedIds = rawRecommended.length ? rawRecommended : SNAPSHOT_RECOMMENDED;
     const prices = new Map(Object.entries({ ...SNAPSHOT_PRICES, ...rawPrices }));
-    const fusionRoutes = Array.isArray(cached.fusionRoutes) ? cached.fusionRoutes.filter((r) => typeof r === 'string' && r.startsWith('fusion-')) : [];
+    const fusionRoutes = cached.fusionRoutesVersion === CLI_VERSION && Array.isArray(cached.fusionRoutes)
+      ? cached.fusionRoutes.filter(parseFusionRoute) : [];
     return {
       families,
       images,
@@ -761,234 +758,40 @@ export function getModelRows(state, accountId) {
   return rows;
 }
 
-// ── Fusion（lead + sidekick 路由家族）─────────────────────────────────────────
-// 官方搭配与限制按真实 `devin models list` / `GetCliModelConfigs` 校验：
-// - Lead 为前沿模型（仅部分支持 `-fast`），Sidekick 为低成本执行模型（各自只允许特定档位）；
-// - 默认 Opus 5.5 Medium + SWE-2 Medium；含点号家族（如 gpt-5.6-sol / glm-5.2）使用 wire 连字符基名。
-const FUSION_LEAD_ALLOW = new Set([
-  'claude-fable-5-1', 'claude-fable-5-2', 'claude-opus-5', 'claude-opus-5-5', 'claude-sonnet-5-5',
-  'gpt-5-6-sol', 'gpt-6-1-sol', 'gpt-6-2-astra', 'gpt-6-2-sol', 'gpt-6-astra', 'gpt-6-sol'
-]);
-const FUSION_FAST_LEADS = new Set([
-  'claude-fable-5-1', 'claude-fable-5-2', 'claude-opus-5', 'claude-opus-5-5', 'claude-sonnet-5-5',
-  'gpt-5-6-sol', 'gpt-6-1-sol', 'gpt-6-2-astra', 'gpt-6-2-sol', 'gpt-6-astra', 'gpt-6-sol'
-]);
-const FUSION_SIDEKICK_EFFORTS = {
-  'swe-2': ['medium', 'high'],
-  'swe-2-flash': ['max'],
-  'claude-haiku-5-5': ['medium'],
-  'claude-sonnet-5-5': ['medium'],
-  'glm-5-2': [],
-  'gpt-5-6-luna': ['high'],
-  'gpt-5-6-sol': ['high'],
-  'gpt-6-luna': ['high'],
-  'gpt-6-1-terra': ['high']
-};
-export const FUSION_DEFAULT = { lead: 'claude-opus-5-5', leadEffort: 'medium', sidekick: 'swe-2', sidekickEffort: 'medium' };
-
-const stripVariantSuffix = (uid) => {
-  let rest = String(uid ?? '');
-  for (const [word] of TIERS) {
-    if (rest.endsWith('-' + word)) {
-      rest = rest.slice(0, -(word.length + 1));
-      break;
-    }
+// 官方快照只在默认服务可用；且必须在账号目录中找到搭配的两个标准变体。
+function fusionIndexOf(state, accountId, status = catalogStatus(state, accountId)) {
+  if (!accountId || status.broken) return fusionRouteIndex([], []);
+  const owner = state?.accounts?.find((a) => a.id === accountId);
+  const server = (process.env.WINDSURF_API_SERVER_URL?.trim() || owner?.server || state?.settings?.serverUrl || DEFAULT_SERVER).replace(/\/+$/, '');
+  if (status.fusionRoutes.length && state.catalogs?.[accountId]?.fusionServer === server) {
+    return fusionRouteIndex(status.fusionRoutes, status.families);
   }
-  const lvl = levelOf(rest);
-  if (lvl && rest.endsWith('-' + lvl)) rest = rest.slice(0, -(lvl.length + 1));
-  else if (lvl === 'minimal' && rest.endsWith('-min')) rest = rest.slice(0, -4);
-  return rest;
-};
-
-export function familyWireBase(family) {
-  for (const m of family?.models ?? []) {
-    if (typeof m?.id !== 'string' || !m.id || /^MODEL_/.test(m.id)) continue;
-    const base = stripVariantSuffix(m.id);
-    if (base) return base;
-  }
-  return String(family?.uid ?? '').replace(/\.(?=\d)/g, '-');
+  if (server !== DEFAULT_SERVER) return fusionRouteIndex([], []);
+  const ids = new Set(status.families.flatMap((f) => f.models.map((m) => m?.id)));
+  const untiered = ({ uid, tier }) => tier ? uid.slice(0, -(tier.length + 1)) : uid;
+  const routes = SNAPSHOT_FUSION_ROUTES.filter((uid) => {
+    const { lead, sidekick } = parseFusionRoute(uid);
+    return ids.has(untiered(lead)) && ids.has(untiered(sidekick));
+  });
+  return fusionRouteIndex(routes, status.families);
 }
 
-function splitFusionUid(uid) {
-  const m = /^fusion-(.+)-sidekick-(.+)$/.exec(String(uid ?? ''));
-  if (!m) return null;
-  const parsePart = (part) => {
-    const [tier, lvl] = tierOf(part);
-    const eff = lvl || levelOf(part);
-    const base = stripVariantSuffix(part);
-    return { base, effort: eff, tier };
-  };
-  return { lead: parsePart(m[1]), sidekick: parsePart(m[2]) };
-}
-
-// 官方 Fusion 组合表（devin models list 的 fusion-<lead>-sidekick-<sidekick>）：
-// 逐条解析出每个 lead 允许的 sidekick（标准/快速）与每个 sidekick 的档位，供 UI 过滤与路由校验。
-export function fusionRouteMatrix(routes) {
-  const leads = new Map();
-  const sidekicks = new Map();
-  for (const uid of routes ?? []) {
-    if (typeof uid !== 'string' || !uid.startsWith('fusion-')) continue;
-    const parsed = splitFusionUid(uid);
-    if (!parsed) continue;
-    const { lead, sidekick } = parsed;
-    const fast = lead.tier === 'fast';
-    let l = leads.get(lead.base);
-    if (!l) {
-      leads.set(lead.base, (l = { efforts: new Set(), fastEfforts: new Set(), sidekicks: new Set(), fastSidekicks: new Set() }));
-    }
-    if (lead.effort) (fast ? l.fastEfforts : l.efforts).add(lead.effort);
-    (fast ? l.fastSidekicks : l.sidekicks).add(sidekick.base);
-    let s = sidekicks.get(sidekick.base);
-    if (!s) sidekicks.set(sidekick.base, (s = { efforts: new Set(), leads: new Set(), fastLeads: new Set() }));
-    if (sidekick.effort) s.efforts.add(sidekick.effort);
-    (fast ? s.fastLeads : s.leads).add(lead.base);
-  }
-  return { leads, sidekicks };
-}
-
-const pickFusionEffort = (efforts, preferred) => {
-  const list = Array.isArray(efforts) ? efforts : [];
-  if (!list.length) return '';
-  if (preferred && list.includes(preferred)) return preferred;
-  return list.includes('medium') ? 'medium' : list[0];
-};
-
-export function fusionOptions(state, accountId) {
-  const status = catalogStatus(state, accountId);
-  const fams = status.broken ? [] : status.families;
-  const byWire = new Map(fams.map((f) => [familyWireBase(f), f]));
-  const routes = status.fusionRoutes ?? [];
-  if (routes.length) {
-    const matrix = fusionRouteMatrix(routes);
-    const optionOf = (id) => {
-      const fam = byWire.get(id);
-      return { id, ...(fam ? { familyId: fam.uid } : {}), name: fam?.label || id };
-    };
-    const leadList = [...matrix.leads].map(([id, lead]) => ({
-      ...optionOf(id),
-      efforts: LEVEL_RANK.filter((level) => lead.efforts.has(level)),
-      fast: lead.fastEfforts.size > 0 || lead.fastSidekicks.size > 0,
-      sidekicks: [...lead.sidekicks],
-      fastSidekicks: [...lead.fastSidekicks]
-    }));
-    const sidekickList = [...matrix.sidekicks].map(([id, side]) => ({
-      ...optionOf(id),
-      efforts: LEVEL_RANK.filter((level) => side.efforts.has(level)),
-      leads: [...side.leads],
-      fastLeads: [...side.fastLeads]
-    }));
-    const defaultLead = leadList.find((lead) => lead.id === FUSION_DEFAULT.lead) ?? leadList[0];
-    const defaultSidekick = defaultLead
-      ? (defaultLead.sidekicks.includes(FUSION_DEFAULT.sidekick) ? FUSION_DEFAULT.sidekick : defaultLead.sidekicks[0])
-      : FUSION_DEFAULT.sidekick;
-    const defaultSideObj = sidekickList.find((side) => side.id === defaultSidekick);
-    return {
-      leads: leadList,
-      sidekicks: sidekickList,
-      default: {
-        lead: defaultLead?.id ?? FUSION_DEFAULT.lead,
-        leadEffort: pickFusionEffort(defaultLead?.efforts, FUSION_DEFAULT.leadEffort),
-        sidekick: defaultSidekick ?? FUSION_DEFAULT.sidekick,
-        sidekickEffort: pickFusionEffort(defaultSideObj?.efforts, FUSION_DEFAULT.sidekickEffort)
-      }
-    };
-  }
-
-  const leads = [];
-  const sidekicks = [];
-  const seenLead = new Set();
-  const seenSide = new Set();
-  for (const f of fams) {
-    const wire = familyWireBase(f);
-    const stdEfforts = efforts(f, '');
-    if (FUSION_LEAD_ALLOW.has(wire) && !seenLead.has(wire)) {
-      seenLead.add(wire);
-      leads.push({ id: wire, familyId: f.uid, name: f.label || f.uid, efforts: stdEfforts, fast: FUSION_FAST_LEADS.has(wire) });
-    }
-    if (Object.hasOwn(FUSION_SIDEKICK_EFFORTS, wire) && !seenSide.has(wire)) {
-      seenSide.add(wire);
-      const allowed = FUSION_SIDEKICK_EFFORTS[wire];
-      const matched = stdEfforts.filter((e) => allowed.includes(e));
-      sidekicks.push({ id: wire, familyId: f.uid, name: f.label || f.uid, efforts: allowed.length ? matched : [] });
-    }
-  }
-  const allSidekickIds = sidekicks.map((side) => side.id);
+export function fusionCatalogOf(state, accountId) {
+  const index = fusionIndexOf(state, accountId);
   return {
-    leads: leads.map((lead) => ({
-      ...lead,
-      sidekicks: [...allSidekickIds],
-      fastSidekicks: lead.fast ? [...allSidekickIds] : []
-    })),
-    sidekicks,
-    default: { ...FUSION_DEFAULT }
+    selection: selectFusionRoute(index, state?.fusion?.[accountId]),
+    options: { leads: index.leads, sidekicks: index.sidekicks }
   };
 }
 
-export function fusionSupportsFast(state, accountId) {
-  return fusionConfigOf(state, accountId).fastAllowed === true;
-}
-
-export function fusionConfigOf(state, accountId) {
-  const saved = state?.fusion?.[accountId];
-  const opts = fusionOptions(state, accountId);
-  const fallback = opts.default && typeof opts.default === 'object' ? opts.default : FUSION_DEFAULT;
-  const normBase = (id, list) => {
-    const dotted = String(id ?? '').replace(/\.(?=\d)/g, '-');
-    const hit = list.find((item) => item.id === id || item.familyId === id || item.id === dotted);
-    return hit ? hit.id : dotted || id;
-  };
-  const pickEffOf = (efforts, savedEff, fallbackEff, hasExplicit) => {
-    if (!Array.isArray(efforts) || !efforts.length) return '';
-    if (savedEff && efforts.includes(savedEff)) return savedEff;
-    if (!hasExplicit && fallbackEff && efforts.includes(fallbackEff)) return fallbackEff;
-    return efforts.includes('medium') ? 'medium' : efforts[0];
-  };
-  let lead = saved?.lead ? normBase(saved.lead, opts.leads) : fallback.lead;
-  let leadObj = opts.leads.find((item) => item.id === lead || item.familyId === lead);
-  if (!leadObj && opts.leads.length) {
-    leadObj = opts.leads.find((item) => item.id === fallback.lead) ?? opts.leads[0];
-    lead = leadObj.id;
-  }
-  lead = leadObj?.id ?? lead;
-  const leadEffort = leadObj
-    ? pickEffOf(leadObj.efforts, saved?.leadEffort, fallback.leadEffort, Boolean(saved?.lead))
-    : (saved?.leadEffort ?? fallback.leadEffort);
-  const allowedSidekicks = Array.isArray(leadObj?.sidekicks) && leadObj.sidekicks.length ? leadObj.sidekicks : null;
-  let sidekick = saved?.sidekick ? normBase(saved.sidekick, opts.sidekicks) : fallback.sidekick;
-  if (allowedSidekicks && !allowedSidekicks.includes(sidekick)) {
-    sidekick = allowedSidekicks.includes(fallback.sidekick) ? fallback.sidekick : allowedSidekicks[0];
-  }
-  const sideObj = opts.sidekicks.find((item) => item.id === sidekick || item.familyId === sidekick);
-  if (!sideObj && opts.sidekicks.length) {
-    sidekick = allowedSidekicks?.[0] ?? fallback.sidekick;
-  }
-  const sidekickEffort = sideObj
-    ? pickEffOf(sideObj.efforts, saved?.sidekickEffort, fallback.sidekickEffort, Boolean(saved?.sidekick))
-    : (saved?.sidekickEffort ?? fallback.sidekickEffort);
-  const fastAllowed = Boolean(leadObj?.fast)
-    && (Array.isArray(leadObj?.fastSidekicks) ? leadObj.fastSidekicks.includes(sidekick) : true);
-  return {
-    ...FUSION_DEFAULT,
-    ...(saved ?? {}),
-    lead,
-    leadEffort,
-    sidekick,
-    sidekickEffort,
-    fastAllowed
-  };
-}
-
-export function fusionDescriptor(state, accountId) {
-  const cfg = fusionConfigOf(state, accountId);
-  const status = catalogStatus(state, accountId);
-  const fams = status.broken ? [] : status.families;
-  const leadFamily = fams.find((f) => named(f, cfg.lead) || familyWireBase(f) === cfg.lead);
-  const contextWindow = leadFamily?.models?.find((m) => m.context)?.context || 200000;
-  const maxTokens = Math.min(contextWindow, leadFamily?.models?.find((m) => m.output)?.output || 128000);
+function fusionDescriptor(selection, families) {
+  const lead = families.flatMap((f) => f.models).find((m) => m?.id === selection.leadUid);
+  const contextWindow = lead?.context || 200000;
+  const maxTokens = Math.min(contextWindow, lead?.output || 128000);
   return {
     id: FUSION_MODEL_ID,
     name: 'Fusion',
-    api: isClaude(cfg.lead) ? 'anthropic-messages' : 'openai-completions',
+    api: isClaude(selection.leadUid) ? 'anthropic-messages' : 'openai-completions',
     contextWindow,
     maxTokens,
     input: ['text'],
@@ -998,7 +801,7 @@ export function fusionDescriptor(state, accountId) {
   };
 }
 
-export function profileFor(state) {
+export function profileFor(state, fusionSelection) {
   if (state.enabled === false) return null;
   const accountId = state.activeAccountId;
   const owner = state.accounts?.find((a) => a.id === accountId);
@@ -1024,7 +827,8 @@ export function profileFor(state) {
       },
       ...(row.effective.reasoningEfforts ? { reasoningEfforts: row.effective.reasoningEfforts } : { reasoningEfforts: false })
     }));
-  models.push(fusionDescriptor(state, accountId));
+  const selection = fusionSelection === undefined ? fusionCatalogOf(state, accountId).selection : fusionSelection;
+  if (selection) models.push(fusionDescriptor(selection, status.families));
   return {
     provider: ROUTE_ID,
     displayName: ROUTE_DISPLAY_NAME,

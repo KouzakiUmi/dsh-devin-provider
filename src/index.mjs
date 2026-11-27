@@ -10,12 +10,13 @@ import { AssistantMessageEventStream, InMemoryCredentialStore, calculateCost } f
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { DevinController } from './manager.mjs';
 import { FUSION_MODEL_ID, ROUTE_ID, assertAccountId } from './state.mjs';
-import { getModelRows, profileFor, fusionConfigOf } from './catalog.mjs';
+import { fusionCatalogOf, getModelRows, profileFor } from './catalog.mjs';
 import { devinRemote } from './remote.mjs';
 import { applyModelDefaults, captureModelDefaults, describeModelDefaults, getModelDefaults } from './model-defaults.mjs';
 import { createAdapterLease, leasedStream } from './adapter-lease.mjs';
 import { createDevinAdapter } from './devin-adapter.mjs';
 import { forgetSigTypes, forgetThoughts } from './devin-wire.mjs';
+import { registerFusionHandoff } from './fusion-handoff.mjs';
 
 export const name = 'dsh-devin-provider';
 export const inject = ['llm'];
@@ -24,12 +25,15 @@ export const Config = z.object({
   devinCliPath: z.string().description('可选：devin CLI 原生可执行文件绝对路径').default('')
 });
 
-function routingFingerprint(routes, modelIds, facts, defaults) {
+function routingFingerprint(routes, models, facts, defaults, families, owner, fusion) {
   return JSON.stringify([
     routes,
-    modelIds,
+    models,
     [...facts.entries()].map(([id, row]) => [id, row.enabled, row.legacy === true, row.effective]),
-    [...defaults.entries()]
+    [...defaults.entries()],
+    families.map((family) => [family.uid, family.aliases, family.models.map((model) => model?.id)]),
+    [owner.id, owner.authMode, owner.server, owner.apiKeyRef],
+    fusion
   ]);
 }
 
@@ -158,6 +162,7 @@ export function apply(ctx, config) {
   }
 
   const managedAdapter = new ManagedAdapter();
+  const sidekickRuns = new Map();
 
   async function refreshAdapters() {
     if (controller.disposed) return;
@@ -166,7 +171,8 @@ export function apply(ctx, config) {
     let previous;
     try {
       const state = structuredClone(controller.store.current);
-      const profile = profileFor(state);
+      const { selection: fusion } = fusionCatalogOf(state, state.activeAccountId);
+      const profile = profileFor(state, fusion);
       const nextDefaults = captureModelDefaults(state);
       const routes = profile ? [ROUTE_ID] : [];
       previous = currentGeneration;
@@ -182,9 +188,9 @@ export function apply(ctx, config) {
 
       const facts = new Map(getModelRows(state, state.activeAccountId).map((row) => [row.id, row]));
       facts.set(FUSION_MODEL_ID, { id: FUSION_MODEL_ID, enabled: true, effective: { toolsEnabled: true } });
-      const fingerprint = routingFingerprint(routes, profile.models.map((m) => m.id), facts, nextDefaults) + ':fusion:' + JSON.stringify(state.fusion ?? {});
+      const owner = state.accounts.find((a) => a.id === state.activeAccountId);
+      const fingerprint = routingFingerprint(routes, profile.models, facts, nextDefaults, profile.families, owner, fusion);
       if (registration && previous?.fingerprint === fingerprint) {
-        const owner = state.accounts.find((a) => a.id === state.activeAccountId);
         controller.appliedAccount = owner
           ? { id: owner.id, displayName: owner.identity?.email || owner.identity?.name || owner.label }
           : null;
@@ -196,14 +202,14 @@ export function apply(ctx, config) {
         {
           profile,
           facts,
-          resolveCredential: async () => {
-            const owner = state.accounts.find((a) => a.id === state.activeAccountId);
-            return owner ? controller.resolveCredential(owner) : undefined;
-          },
+          resolveCredential: () => controller.resolveCredential(owner),
           keepaliveConfig: () => controller.store.current?.settings?.cacheKeepalive,
-          resolveFusion: () => {
-            const st = controller.store.current;
-            return fusionConfigOf(st, st?.activeAccountId);
+          resolveFusion: () => fusion,
+          resolveSidekickRun: (id, model) => {
+            const run = sidekickRuns.get(id);
+            if (!run) return undefined;
+            if (run.ownerId !== owner.id || run.model !== model) throw new Error('Devin Sidekick 账号或模型已切换');
+            return run;
           },
           resolveFastMode: (sessionId) => {
             const id = typeof sessionId === 'string' ? sessionId.trim() : '';
@@ -220,7 +226,7 @@ export function apply(ctx, config) {
         await nextAdapter.dispose();
         return;
       }
-      nextGeneration = { adapter: nextAdapter, defaults: nextDefaults, fingerprint };
+      nextGeneration = { adapter: nextAdapter, defaults: nextDefaults, fingerprint, owner, profile, fusion };
       nextGeneration.lease = createAdapterLease(
         async () => {
           try {
@@ -240,7 +246,6 @@ export function apply(ctx, config) {
         currentGeneration = previous;
         throw error;
       }
-      const owner = state.accounts.find((a) => a.id === state.activeAccountId);
       controller.appliedAccount = owner
         ? { id: owner.id, displayName: owner.identity?.email || owner.identity?.name || owner.label }
         : null;
@@ -264,6 +269,21 @@ export function apply(ctx, config) {
     return operation;
   };
   controller.onChange = queueRoutingUpdate;
+
+  ctx.inject(['tools', 'subagents'], (scope) => {
+    if (typeof scope.tools.resolve !== 'function' || typeof scope.subagents.startActivation !== 'function') return;
+    scope.effect(() => registerFusionHandoff(scope, {
+      runs: sidekickRuns,
+      resolveCredential: (owner) => controller.resolveCredential(owner),
+      live: (sessionId) => currentGeneration && {
+        generation: currentGeneration,
+        owner: currentGeneration.owner,
+        profile: currentGeneration.profile,
+        fusion: currentGeneration.fusion,
+        fastMode: Boolean(controller.store.current?.fastSessions?.[sessionId])
+      }
+    }));
+  });
 
   class DevinService extends TypertRemoteService {
     constructor(scope) {

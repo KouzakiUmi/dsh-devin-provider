@@ -387,8 +387,10 @@ test('FusionPillEntry shows lightning button only for fast-capable models and to
       config: { lead: 'claude-opus-5-5', leadEffort: 'medium', sidekick: 'swe-2', sidekickEffort: 'medium' },
       options: {
         leads: [{
-          id: 'claude-opus-5-5', name: 'Claude Opus 5.5', efforts: ['medium', 'high'], fast: true,
-          sidekicks: ['swe-2'], fastSidekicks: []
+          id: 'claude-opus-5-5', name: 'Claude Opus 5.5', variants: [
+            { effort: 'medium', sidekicks: [{ id: 'swe-2', efforts: ['medium'], fastEfforts: [] }] },
+            { effort: 'high', sidekicks: [{ id: 'gpt-6-luna', efforts: ['high'], fastEfforts: ['high'] }] }
+          ]
         }],
         sidekicks: [
           { id: 'swe-2', name: 'SWE-2', efforts: ['medium', 'high'] },
@@ -493,6 +495,11 @@ test('FusionPillEntry shows lightning button only for fast-capable models and to
     assert.ok(textOf(popover).includes('SWE-2'));
     assert.equal(textOf(popover).includes('GPT-6 Luna'), false, '未在该 Lead 官方搭配中的 sidekick 不应出现在下拉');
     assert.equal(textOf(popover).includes('支持 ⚡ 快速模式'), false, '当前 sidekick 没有 fast 组合时不显示快速模式提示');
+    findAll(popover, (n) => n.type === 'select')[1].props.onChange({ target: { value: 'high' } });
+    tree = await mini.flush(() => mini.React.createElement(pillEntry.comp, injected1));
+    const changed = findAll(tree, (n) => hasClass(n, 'ddp-fusion-popover'))[0];
+    assert.deepEqual(findAll(changed, (n) => n.type === 'select').map(n => n.props.value), ['claude-opus-5-5', 'high', 'gpt-6-luna', 'high']);
+    assert.ok(textOf(changed).includes('支持 ⚡ Fast'));
 
     // 切离 fusion 模型时自动收起弹窗并隐藏选择条
     currentModel = 'swe-2';

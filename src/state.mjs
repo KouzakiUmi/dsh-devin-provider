@@ -193,7 +193,7 @@ export function normalizeKeepaliveSettings(input) {
   return { enabled, intervalSec, maxPings };
 }
 
-export const FUSION_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+export const FUSION_EFFORTS = ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 export const FUSION_MODEL_ID = 'fusion';
 
 export function normalizeFusionConfig(input) {

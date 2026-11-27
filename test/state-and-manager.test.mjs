@@ -347,6 +347,7 @@ test('DevinController persists per-session fastMode (fastSessions), ignores lega
     assert.equal(q.state, 'ok');
     assert.equal(q.windows[0].remainingPercent, 64);
     assert.equal(usageCalls, 1);
+    await controller.operations;
     controller.dispose();
 
     // 3) 重启新实例无需再请求网络即可直接读到磁盘持久化额度；故障时保留上次有效缓存并标 stale
@@ -392,6 +393,7 @@ test('DevinController 拉取 RPC 目录后用 CLI 补全官方 Fusion 组合表'
     const fakeCli = join(dir, 'devin.exe');
     await writeFile(fakeCli, '');
     const grants = new Map();
+    let cliUnavailable = false;
     const routes = [
       'fusion-claude-opus-5-5-medium-sidekick-swe-2-medium',
       'fusion-claude-opus-5-5-medium-fast-sidekick-swe-2-medium',
@@ -433,7 +435,10 @@ test('DevinController 拉取 RPC 目录后用 CLI 补全官方 Fusion 组合表'
       writeGrant: async (id, val) => { grants.set(id, val); },
       deleteGrant: async (id) => { grants.delete(id); },
       // RPC 不含 Fusion 组合表；补全路径只读取 CLI 的 fusionRoutes。
-      cliModelsReader: async () => ({ families: [], freeIds: [], prices: {}, fusionRoutes: routes })
+      cliModelsReader: async () => {
+        if (cliUnavailable) throw new Error('CLI unavailable');
+        return { families: [], freeIds: [], prices: {}, fusionRoutes: routes };
+      }
     });
     await controller.store.load();
     const snap = await controller.invoke({
@@ -445,10 +450,12 @@ test('DevinController 拉取 RPC 目录后用 CLI 补全官方 Fusion 组合表'
     const pulled = await controller.invoke({ op: 'models', revision: snap.revision, accountId: 'work' });
     assert.deepEqual(controller.store.current.catalogs.work.fusionRoutes, routes);
     const fable = pulled.fusion.options.leads.find((lead) => lead.id === 'claude-fable-5-2');
-    assert.equal(fable.fast, true);
-    assert.deepEqual(fable.fastSidekicks, ['gpt-6-luna']);
+    assert.deepEqual(fable.variants, [{ effort: 'high', sidekicks: [{ id: 'gpt-6-luna', efforts: ['high'], fastEfforts: ['high'] }] }]);
     // 快照只暴露可持久化字段
     assert.equal(Object.hasOwn(pulled.fusion.config, 'fastAllowed'), false);
+    cliUnavailable = true;
+    const refreshed = await controller.invoke({ op: 'models', revision: pulled.revision, accountId: 'work' });
+    assert.deepEqual(refreshed.fusion.options, pulled.fusion.options);
     controller.dispose();
   } finally {
     await rm(dir, { recursive: true, force: true });
