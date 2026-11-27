@@ -29,7 +29,7 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
 
   const { PB, frame, fields, dec } = await import('../src/pb.mjs');
   const { createDevinAdapter } = await import('../src/devin-adapter.mjs');
-  const { getModelRows, profileFor } = await import('../src/catalog.mjs');
+  const { getModelRows, profileFor, SNAPSHOT_FAMILIES } = await import('../src/catalog.mjs');
   const { initialState } = await import('../src/state.mjs');
 
   const state = initialState();
@@ -40,6 +40,10 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
     'swe-2': { defaultReasoning: 'medium' }
   };
 
+  const filtered = profileFor(state).models;
+  assert.ok(filtered.some((model) => model.id === 'gpt-6-2-sol'));
+  assert.ok(!filtered.some((model) => model.id === 'glm-5-3' || model.id === 'gpt-6-sol'));
+  state.settings.hideLegacyModels = false; // continue exercising older route variants in the full catalog
   const profile = profileFor(state);
   const facts = new Map(getModelRows(state, 'a1').map((r) => [r.id, r]));
 
@@ -83,7 +87,7 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
   const models = await adapter.listModels('devin');
   assert.ok(models.some((model) => model.id === 'fusion'));
   assert.ok(models.some((model) => model.id === 'swe-2-1'));
-  assert.equal(models.some((model) => model.id === 'claude-opus-4.6'), false);
+  assert.equal(models.some((model) => model.id === 'claude-opus-4.6'), true);
   const resolved = await adapter.resolveModel('devin', 'gpt-6-sol');
   assert.ok(resolved.reasoning.efforts.some((e) => e.id === 'off'));
 
@@ -167,6 +171,15 @@ test('Real DSH Core integration: DevinAdapter + PiAiAdapter + devin-wire stream'
   }, /工具调用/);
   blockedAdapter.dispose();
   adapter.dispose();
+
+  state.settings.hideLegacyModels = true;
+  state.catalogs.a1 = { families: SNAPSHOT_FAMILIES.filter((family) => family.uid === 'glm-5-3') };
+  const emptyAdapter = createDevinAdapter(
+    { LlmAdapter, LlmError, PiAiAdapter, InMemoryCredentialStore, AssistantMessageEventStream, calculateCost, resolveRetryPolicy },
+    { profile: profileFor(state), facts: new Map(), resolveCredential: async () => ({ key: 'cog_test_token' }) }
+  );
+  try { assert.deepEqual(await emptyAdapter.listModels('devin'), []); }
+  finally { emptyAdapter.dispose(); }
 
   // 4. Verify src/index.mjs exports & Config schema parse under real DSH runtime
   const hostMod = await import('../src/index.mjs');

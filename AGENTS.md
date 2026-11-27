@@ -54,7 +54,7 @@
 ### Fusion（lead + sidekick 路由家族）
 - **协议（Devin CLI 3000.15.14）**：Lead 用 `AssignModel` field 2=组合 UID、3=cascadeId、5=用户轮，`GetChatMessage` 用 field 21=分配模型、16=cascadeId、26=assignmentJwt。CLI 通过本地工具触发 Sidekick：为子会话重新分配，`AssignModel` fields 2/6 均为组合 UID，子会话 `GetChatMessage` 用独立 cascadeId 和返回的精确副模型 UID，不复制 Lead 的 JWT。
 - **交接**：`fusion-handoff.mjs` 注册仅向 Fusion Lead 开放的 `devin_sidekick`。用 DSH 本地 `spawn` 启动独立会话，遵循子代理深度与现有工具权限，阻塞等待报告交给 Lead；工具卡、子会话与报告由 DSH 展示。插件不模拟 CLI 的后台交接和历史子会话续跑；Sidekick 绑定只在本次交接期间存在。
-- **目录**：`fusion-routes.mjs` 以四元组索引标准 UID 和快速 UID，禁止合成未列出的路由；`catalog.mjs` 将其投影为 `fusion.{config,options,perAccount}` 的配置及选项。`profileFor` 仅在有合法组合时暴露 Fusion，描述符随标准 Lead 变体；适配器按已应用的账号和组合固化一代路由，会话快速开关仍实时读取。默认搭配 Opus 5.5 Medium + SWE-2 Medium。
+- **目录**：`fusion-routes.mjs` 以四元组索引标准 UID 和快速 UID，禁止合成未列出的路由；`catalog.mjs` 将其投影为 `fusion.{config,options,perAccount}` 的配置及选项。`profileFor` 仅在有合法组合时暴露 Fusion，描述符随标准 Lead 变体；适配器按已应用的账号和组合固化一代路由，会话快速开关仍实时读取。默认搭配 Opus 5.5 Medium + SWE-2.1 Medium。
 - **缓存**：`op:'models'` 优先 `GetCliModelConfigs`，再用 `devin models list` 补组合。新版缓存按协议版本及服务地址校验，暂时拉不到时复用同版本、同服务的上次结果。没有匹配缓存时，官方服务使用内置的 438 条组合（255 标准、183 快速）与账号目录交集；自定义服务使用自身组合。
 - **UI**：设置页与聊天药丸共用依赖式选择器；副模型及档位按当前主模型档位过滤，快速模式只对精确搭配显示。Lead 与 Sidekick 仍分别由 Devin 计费。
 
@@ -68,8 +68,8 @@
 - pb/wire/adapter/index/catalog/state/manager/quota/keepalive/lease/defaults/oauth/cli/client 均已审查：凭据脱敏、accountId/路径穿越防护、PKCE state 校验、回调仅绑 127.0.0.1、HTML 转义、CLI spawn 无注入 + 隔离 home、状态锁 + 原子写齐全，未发现关键缺陷。
 - 先前两项疑似问题已定性：Claude「思考+摘要进 CoT」为 Devin 服务端多轮工具上下文行为（签名覆盖整段思考，须原样回放，不可拆分）；SWE-2 schema 写错为 magpie 插件侧问题，本插件目录/参数处理与参考实现一致。
 
-## SWE-2.1 同步与老旧模型过滤 / 已启用置顶
+## 最新代模型筛选与已启用置顶
 
-- **Devin CLI 与 SWE-2.1**：以 `3000.15.14` 对照，普通目录的 54 家族、318 变体、12 个免费变体及 14 个推荐家族与已有模型快照一致。SWE-2.1（256K/64K、图片输入）的快速档展示官方名称 Ultrafast，路由仍使用 `-lightning` 后缀。
-- **老旧模型过滤（默认开启，双端生效）**：`parseRecommended()` 从 `GetCliModelConfigs` protobuf 的 field 11（`ClientModelConfig.is_recommended`）解析官方推荐家族；旧缓存或 CLI fallback 回退到 `SNAPSHOT_RECOMMENDED`，自定义私服无命中时不误清空列表。`state.settings.hideLegacyModels` 默认 `true`（旧版 `state.json` 缺该字段时自动回退为 `true`），通过 `setHideLegacyModels` RPC 原子切换；`saveSettings` 未传该字段时保留现值。开启时 `profileFor`、`captureModelDefaults` 与设置页模型列表同步隐藏老旧模型，并把 `profile.models` ID 序列纳入 `index.mjs` 路由指纹以即时重建适配器。
-- **已启用模型置顶**：`getModelRows()` 与 `src/client.js` 均对模型列表执行稳定排序，确保已启用模型始终排在已停用模型前面且各自保持原序；设置页模型搜索栏右侧新增「过滤老旧模型」默认开启开关，关闭后老旧模型带「老旧」标签，搜索仅命中老旧模型时提供一键显示入口。
+- **代际清单**：`src/model-generations.mjs` 是默认可见性的规则源。按厂商发布证据维护最新代及同代分支；不从 Devin 的推荐标记、账号目录最高版本或名称排序推断代际。账号缺少已核实的最新代时不回退，包括只有 GLM-5.3 的目录；新发布型号需在代际清单核验后随插件更新。
+- **设置与作用域**：沿用 `hideLegacyModels`（默认 `true`）与 `setHideLegacyModels`，不迁移账号偏好。普通模型设置页、路由注册和参数默认值使用 `getModelRows()` 发出的 `legacy` 标记；Fusion 在建索引前用同一清单筛选两侧实际存在的变体。关闭开关恢复完整目录。
+- **已启用模型置顶**：设置页稳定排序；非当前代只在完整目录展示，并可从筛选空态直接切换到完整目录。

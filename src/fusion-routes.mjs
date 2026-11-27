@@ -16,7 +16,7 @@ export function parseFusionRoute(uid) {
   return lead && sidekick ? { uid, lead, sidekick, fast: Boolean(lead.tier || sidekick.tier) } : null;
 }
 
-export const FUSION_DEFAULT = { lead: 'claude-opus-5-5', leadEffort: 'medium', sidekick: 'swe-2', sidekickEffort: 'medium' };
+export const FUSION_DEFAULT = { lead: 'claude-opus-5-5', leadEffort: 'medium', sidekick: 'swe-2-1', sidekickEffort: 'medium' };
 const keyOf = ({ id, effort }) => `${id}/${effort}`;
 const preferredEffort = (options, preferred) => options.includes(preferred) ? preferred
   : options.includes('medium') ? 'medium' : options[0];

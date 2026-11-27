@@ -392,7 +392,7 @@ function busyMessage(key) {
     provider: '正在更新 Devin Provider 启用状态…',
     settings: '正在保存缓存保活与服务设置…',
     models: '正在拉取 Devin 模型列表…',
-    'legacy-filter': '正在更新老旧模型过滤设置…',
+    'legacy-filter': '正在更新模型筛选设置…',
     model: `正在更新模型 ${arg || ''} 启用状态…`,
     'model-settings': `正在保存模型 ${arg || ''} 参数…`,
     'model-reset': `正在恢复模型 ${arg || ''} 默认参数…`,
@@ -820,7 +820,7 @@ function ModelRow({ model, disabled, editor, draftError, fieldErrors, onToggle, 
         model?.free
           ? h(ModelTag, { tone: 'success' }, '免费')
           : model?.mixedFree ? h(ModelTag, null, '部分免费') : null,
-        model?.legacy ? h(ModelTag, null, '老旧') : null,
+        model?.legacy ? h(ModelTag, null, '非当前代') : null,
         hasOverrides ? h(ModelTag, { tone: 'accent' }, '已调参') : null,
         !enabled ? h(ModelTag, { tone: 'warn' }, '已停用') : null),
       h('div', { className: 'ddp-model-id' }, model?.id ?? ''),
@@ -1137,7 +1137,7 @@ function fusionRoleState(options, draft, setDraft) {
     leads,
     sidekicks: choices.map(({ id }) => {
       const model = options?.sidekicks?.find((s) => s.id === id);
-      const suffix = model?.unavailable === 'legacy' ? '（需显示老旧模型）'
+      const suffix = model?.unavailable === 'legacy' ? '（需关闭最新代筛选）'
         : model?.unavailable === 'disabled' ? '（未启用）' : '';
       return { id, name: `${model?.name || id}${suffix}` };
     }),
@@ -1397,10 +1397,10 @@ function DevinProviderSection({ client }) {
       setNotice({
         ok: true,
         text: enabled
-          ? '已开启老旧模型过滤（仅保留当前主力模型，同步生效于聊天模型列表）。'
-          : '已关闭老旧模型过滤（已显示全部目录模型，同步生效于聊天模型列表）。'
+          ? '已开启最新代筛选，聊天模型和 Fusion 搭配同步更新。'
+          : '已关闭最新代筛选，显示账号目录中的全部模型。'
       });
-    } catch (e) { await reportError(e, '更新老旧模型过滤开关失败'); }
+    } catch (e) { await reportError(e, '更新最新代筛选失败'); }
   });
 
   const saveModelSettings = (model) => {
@@ -1679,7 +1679,7 @@ function DevinProviderSection({ client }) {
                 : h('span', { style: style.chip }, '按会话生效'))),
           h('section', { className: 'ddp-group', 'aria-label': '模型目录与参数覆盖' },
             h(SectionHeading, {
-              title: `模型目录（已启用 ${enabledVisibleCount}/${visibleModels.length}${hideLegacyModels && legacyCount ? ` · 已过滤 ${legacyCount} 个老旧` : ''}）`,
+              title: `模型目录（已启用 ${enabledVisibleCount}/${visibleModels.length}${hideLegacyModels && legacyCount ? ` · 已隐藏 ${legacyCount} 个` : ''}）`,
               description: activeCatalog
                 ? `来源：${CATALOG_SOURCE_LABELS[activeCatalog.source] ?? activeCatalog.source}${activeCatalog.updatedAt ? ` · 同步于 ${formatTime(activeCatalog.updatedAt)}` : ''} · 已启用模型优先排前 · 价格单位 $/1M（输入 / 缓存读取 / 输出）`
                 : '按模型家族折叠，已隐藏快速模式变体且已启用模型排前；支持独立启停及覆盖上下文、输出上限与思考档位（价格单位 $/1M：输入 / 缓存读取 / 输出）。',
@@ -1697,19 +1697,19 @@ function DevinProviderSection({ client }) {
                   h('label', {
                     className: 'ddp-model-filter-toggle',
                     'data-active': hideLegacyModels ? 'true' : 'false',
-                    title: '开启后仅显示并注册当前主力模型，隐藏老旧模型（同步生效于聊天模型列表）'
+                    title: '仅保留各厂商已核实的最新代及同代分支；缺少最新代时不显示旧款'
                   },
                     h('input', {
                       className: 'ddp-switch-input',
                       type: 'checkbox',
                       checked: hideLegacyModels,
                       disabled,
-                      'aria-label': '过滤老旧模型',
+                      'aria-label': '仅显示最新代',
                       onChange: (e) => toggleHideLegacy(Boolean(e.target.checked))
                     }),
-                    h('span', null, '过滤老旧模型'),
+                    h('span', null, '仅显示最新代'),
                     legacyCount > 0
-                      ? h('span', { className: 'ddp-model-filter-meta' }, hideLegacyModels ? `已隐藏 ${legacyCount}` : `共 ${legacyCount} 旧`)
+                      ? h('span', { className: 'ddp-model-filter-meta' }, hideLegacyModels ? `已隐藏 ${legacyCount}` : `非当前代 ${legacyCount}`)
                       : null)),
                 filteredModels.length
                   ? h('div', { className: 'ddp-list' },
@@ -1724,11 +1724,12 @@ function DevinProviderSection({ client }) {
                     })))
                   : h(Notice, {
                     tone: 'muted',
-                    action: hiddenLegacyMatches > 0
-                      ? h('button', { type: 'button', style: style.btn, disabled, onClick: () => toggleHideLegacy(false) }, `显示老旧模型 (${hiddenLegacyMatches})`)
+                    action: hiddenLegacyMatches > 0 || (hideLegacyModels && !visibleModels.length)
+                      ? h('button', { type: 'button', style: style.btn, disabled, onClick: () => toggleHideLegacy(false) }, '显示全部模型')
                       : null
                   }, hiddenLegacyMatches > 0
-                    ? `未在当前主力模型中匹配到「${modelFilter.trim()}」，但有 ${hiddenLegacyMatches} 个老旧模型匹配。`
+                    ? `最新代中没有匹配「${modelFilter.trim()}」的模型；完整目录有 ${hiddenLegacyMatches} 项匹配。`
+                    : !visibleModels.length ? '当前账号目录暂无已核实的最新代模型。'
                     : `未找到匹配「${modelFilter.trim()}」的模型。`),
                 !filterQ && filteredModels.length > MODEL_PREVIEW_LIMIT
                   ? h('button', { type: 'button', style: { ...style.btn, alignSelf: 'flex-start' }, onClick: () => setModelsOpen((p) => !p) }, modelsOpen ? `仅显示前 ${MODEL_PREVIEW_LIMIT} 个` : `展开全部 ${filteredModels.length} 个模型`)

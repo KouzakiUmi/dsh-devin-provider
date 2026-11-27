@@ -395,8 +395,8 @@ test('DevinController 拉取 RPC 目录后用 CLI 补全官方 Fusion 组合表'
     const grants = new Map();
     let cliUnavailable = false;
     const routes = [
-      'fusion-claude-opus-5-5-medium-sidekick-swe-2-medium',
-      'fusion-claude-opus-5-5-medium-fast-sidekick-swe-2-medium',
+      'fusion-claude-opus-5-5-medium-sidekick-swe-2-1-medium',
+      'fusion-claude-opus-5-5-medium-fast-sidekick-swe-2-1-medium',
       'fusion-claude-fable-5-2-high-sidekick-gpt-6-luna-high',
       'fusion-claude-fable-5-2-high-fast-sidekick-gpt-6-luna-high-priority'
     ];
@@ -449,13 +449,15 @@ test('DevinController 拉取 RPC 目录后用 CLI 补全官方 Fusion 组合表'
     });
     const pulled = await controller.invoke({ op: 'models', revision: snap.revision, accountId: 'work' });
     assert.deepEqual(controller.store.current.catalogs.work.fusionRoutes, routes);
-    const fable = pulled.fusion.options.leads.find((lead) => lead.id === 'claude-fable-5-2');
+    assert.deepEqual(pulled.fusion.options.leads, [], '最新代缺席的旧目录不应恢复已过滤的 Fusion 搭配');
+    const full = await controller.invoke({ op: 'setHideLegacyModels', revision: pulled.revision, enabled: false });
+    const fable = full.fusion.options.leads.find((lead) => lead.id === 'claude-fable-5-2');
     assert.deepEqual(fable.variants, [{ effort: 'high', sidekicks: [{ id: 'gpt-6-luna', efforts: ['high'], fastEfforts: ['high'] }] }]);
     // 快照只暴露可持久化字段
     assert.equal(Object.hasOwn(pulled.fusion.config, 'fastAllowed'), false);
     cliUnavailable = true;
-    const refreshed = await controller.invoke({ op: 'models', revision: pulled.revision, accountId: 'work' });
-    assert.deepEqual(refreshed.fusion.options, pulled.fusion.options);
+    const refreshed = await controller.invoke({ op: 'models', revision: full.revision, accountId: 'work' });
+    assert.deepEqual(refreshed.fusion.options, full.fusion.options);
     controller.dispose();
   } finally {
     await rm(dir, { recursive: true, force: true });

@@ -76,6 +76,7 @@ import { parseFusionRoute } from '../src/fusion-routes.mjs';
 
 const fakeState = () => {
   const s = initialState();
+  s.settings.hideLegacyModels = false; // protocol fixtures include older official combinations
   s.accounts = [{ id: 'devin-1', label: 'Test', authMode: 'api-key' }];
   s.activeAccountId = 'devin-1';
   s.catalogs['devin-1'] = {
@@ -128,7 +129,7 @@ test('内置快照完整投影 438 条官方组合，每个选择发出精确 UI
   assert.equal(options.sidekicks.length, 9);
   assert.ok(options.leads.some(l => l.id === 'gemini-4-neon'));
   assert.ok(options.sidekicks.some(l => l.id === 'swe-2-1'));
-  assert.equal(selection.routeUid, 'fusion-claude-opus-5-5-medium-sidekick-swe-2-medium');
+  assert.equal(selection.routeUid, 'fusion-claude-opus-5-5-medium-sidekick-swe-2-1-medium');
   const standard = new Set();
   const fast = new Set();
   for (const uid of SNAPSHOT_FUSION_ROUTES) {
@@ -175,6 +176,20 @@ test('仅接受有效 Fusion UID，从 CLI 去重提取组合', () => {
   assert.deepEqual(parseFusionRoutesFromFamilies(JSON.stringify({ families: [{ family_uid: 'Fusion', variants: [
     { model_uid: route }, { model_uid: route }, { model_uid: 'fusion-malformed' }
   ] }] })), [route]);
+});
+
+test('Fusion 默认只使用当前代，旧搭配在关闭筛选后恢复', () => {
+  const s = fakeState();
+  delete s.catalogs[s.activeAccountId];
+  s.fusion[s.activeAccountId] = { lead: 'claude-opus-5-5', sidekick: 'swe-2' };
+  s.settings.hideLegacyModels = true;
+  const filtered = fusionCatalogOf(s, s.activeAccountId);
+  assert.deepEqual(filtered.options.sidekicks.map((x) => x.id), ['swe-2-1', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
+  assert.equal(filtered.selection.config.sidekick, 'swe-2-1');
+  assert.ok(filtered.options.leads.some((x) => x.id === 'gpt-6-2-sol'));
+  assert.equal(s.fusion[s.activeAccountId].sidekick, 'swe-2');
+  s.settings.hideLegacyModels = false;
+  assert.equal(fusionCatalogOf(s, s.activeAccountId).selection.config.sidekick, 'swe-2');
 });
 
 test('Sidekick 分配用 field 6；子请求使用其专属模型和 cascadeId', async () => {

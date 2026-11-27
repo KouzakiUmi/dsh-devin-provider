@@ -54,7 +54,7 @@ export function registerFusionHandoff(ctx, { live, resolveCredential, runs, fetc
       const family = runtime.profile.families.find((item) => item.models.some((m) => m?.id === runtime.fusion.sidekickUid));
       if (!family) throw new Error(`当前模型目录缺少 Sidekick ${model}；请刷新模型目录`);
       const childModel = runtime.profile.models.find((item) => item.id === family.uid);
-      if (!childModel) throw new Error(`请先在 Devin Provider 模型列表启用 ${family.label}；老旧模型需关闭过滤`);
+      if (!childModel) throw new Error(`请先在 Devin Provider 模型列表启用 ${family.label}`);
 
       pending.add(parent.id);
       let activation;

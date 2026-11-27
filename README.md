@@ -53,6 +53,7 @@ dsh plugin --profile web add "<tarball 的绝对路径>"
 3. **模型家族折叠与逐模型参数覆盖**
    - 按模型家族折叠展示（如 `swe-2`、`claude-opus-5-5`、`gpt-6-sol`），保留 `-fast`/`-priority` 等加速档位与无思考变体，并由 DSH 思考档位自动映射到对应变体 ID（含 DSH `off` ↔ Devin `none` 映射）。
    - 支持从 `GetCliModelConfigs`（及 `devin models list` 回退）同步账号实时模型目录。
+   - 默认「仅显示最新代」：按插件随版本提供的厂商代际清单筛选，保留已核实的同代分支。不在 Devin 目录中的最新代不会被旧款替代；关闭开关可显示完整账号目录。筛选同时应用于聊天模型和 Fusion 搭配。
    - 支持逐模型启用/停用，以及覆盖 `contextWindow`、`maxTokens`、`temperature`、`imageInput`、`toolsEnabled`、`reasoningEfforts` 与 `defaultReasoning`，并支持一键恢复默认。
    - **Fusion**：从官方组合中选择 Lead 和 Sidekick。Lead 需要委派时，聊天显示交接卡片，并可打开 Sidekick 子会话查看工作过程；完成后 Lead 收到报告。交接需要 DSH 的本地 `spawn` 子代理后端，且副模型须在当前模型列表启用。
 4. **5 分钟提示词缓存保活（默认关闭）**

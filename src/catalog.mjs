@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { CLI_VERSION, DEFAULT_SERVER, MODEL_CONFIGS_RPC, PB, dec, fields, metadata } from './pb.mjs';
 import { CORE_THINKING_LEVELS, FUSION_MODEL_ID, ROUTE_DISPLAY_NAME, ROUTE_ID, assertModelId } from './state.mjs';
 import { fusionRouteIndex, parseFusionRoute, selectFusionRoute } from './fusion-routes.mjs';
+import { isCurrentModelFamily } from './model-generations.mjs';
 
 export const snapshotData = JSON.parse(await readFile(new URL('./catalog-snapshot.json', import.meta.url), 'utf8'));
 
@@ -18,7 +19,6 @@ export function familiesOf(rows) {
 
 export const SNAPSHOT_FAMILIES = familiesOf(snapshotData.families);
 export const SNAPSHOT_FREE = Array.isArray(snapshotData.freeIds) ? snapshotData.freeIds : [];
-export const SNAPSHOT_RECOMMENDED = Array.isArray(snapshotData.recommendedIds) ? snapshotData.recommendedIds : [];
 export const SNAPSHOT_PRICES = snapshotData.prices && typeof snapshotData.prices === 'object' ? snapshotData.prices : {};
 export const SNAPSHOT_FUSION_ROUTES = snapshotData.fusionRoutes;
 const NO_IMAGES = new Set(snapshotData.noImages);
@@ -239,13 +239,7 @@ function familyImages(f, images) {
   return said;
 }
 
-export function listed(families, images = {}, free = new Set(), prices = new Map(), recommended = null) {
-  const recSet = recommended instanceof Set
-    ? recommended
-    : Array.isArray(recommended)
-      ? new Set(recommended)
-      : null;
-  const hasRecommendedMatch = Boolean(recSet && recSet.size > 0 && families.some((f) => recSet.has(f.uid)));
+export function listed(families, images = {}, free = new Set(), prices = new Map()) {
   const priced = (ids) => {
     const defined = ids.map((id) => prices.get(id)).filter(Boolean);
     if (!defined.length || defined.some((p) => JSON.stringify(p) !== JSON.stringify(defined[0]))) return undefined;
@@ -304,7 +298,7 @@ export function listed(families, images = {}, free = new Set(), prices = new Map
     const context = f.models.find((m) => m.context)?.context ?? 0;
     const output = f.models.find((m) => m.output)?.output ?? 0;
     const image = familyImages(f, images);
-    const isLegacy = hasRecommendedMatch && !recSet.has(f.uid);
+    const isLegacy = !isCurrentModelFamily(f.uid);
     add({
       id: f.uid,
       name: f.label,
@@ -366,34 +360,6 @@ export function parseFree(b) {
       else if (g.num === 24 && g.wire === 0) tier = g.n;
     }
     if (uid && tier === FREE_TIER) out.add(uid);
-  }
-  return out;
-}
-
-export function parseRecommended(b) {
-  const out = new Set();
-  for (const f of fields(b)) {
-    if (f.num !== 1 || f.wire !== 2) continue;
-    let uid = '';
-    let name = '';
-    let fam = '';
-    let famLabel = '';
-    let recommended = false;
-    for (const g of fields(f.data)) {
-      if (g.num === 22 && g.wire === 2) uid = dec.decode(g.data);
-      else if (g.num === 1 && g.wire === 2) name = dec.decode(g.data);
-      else if (g.num === 11 && g.wire === 0 && g.n !== 0) recommended = true;
-      else if (g.num === 23 && g.wire === 2) {
-        for (const h of fields(g.data)) if (h.num === 23 && h.wire === 2) fam = dec.decode(h.data);
-      } else if (g.num === 30 && g.wire === 2) {
-        for (const h of fields(g.data)) if (h.num === 1 && h.wire === 2) famLabel = dec.decode(h.data);
-      }
-    }
-    if (!recommended || !uid) continue;
-    const id = fam || famLabel || name || uid;
-    const low = id.toLowerCase();
-    if (low === 'adaptive' || low === 'fusion' || parseFusionRoute(uid)) continue;
-    out.add(id);
   }
   return out;
 }
@@ -583,14 +549,12 @@ export async function fetchCliModelConfigs(key, server, fetchImpl = fetch, signa
   if (!images) throw new Error('GetCliModelConfigs: 未返回模型配置');
   const families = parseConfigFamilies(b);
   const free = [...parseFree(b)];
-  const recommendedIds = [...parseRecommended(b)];
   const prices = Object.fromEntries(parsePrices(b));
   const fusionRoutes = parseFusionRoutesFromConfig(b);
   return {
     families: families.length ? families : SNAPSHOT_FAMILIES,
     images,
     freeIds: free,
-    ...(recommendedIds.length ? { recommendedIds } : {}),
     prices,
     ...(fusionRoutes.length ? { fusionRoutes } : {}),
     source: 'remote',
@@ -668,7 +632,6 @@ export function catalogStatus(state, accountId) {
       families: SNAPSHOT_FAMILIES,
       images: SNAPSHOT_IMAGES,
       freeIds: SNAPSHOT_FREE,
-      recommendedIds: SNAPSHOT_RECOMMENDED,
       prices: new Map(Object.entries(SNAPSHOT_PRICES)),
       fusionRoutes: [],
       source: 'local-snapshot'
@@ -680,10 +643,6 @@ export function catalogStatus(state, accountId) {
     const rawPrices = cached.prices && typeof cached.prices === 'object' ? cached.prices : {};
     const hasCustomCatalogData = (Array.isArray(cached.freeIds) && cached.freeIds.length > 0) || Object.keys(rawPrices).length > 0;
     const freeIds = hasCustomCatalogData ? (Array.isArray(cached.freeIds) ? cached.freeIds : []) : SNAPSHOT_FREE;
-    const rawRecommended = Array.isArray(cached.recommendedIds)
-      ? cached.recommendedIds.filter((id) => typeof id === 'string' && id.trim())
-      : [];
-    const recommendedIds = rawRecommended.length ? rawRecommended : SNAPSHOT_RECOMMENDED;
     const prices = new Map(Object.entries({ ...SNAPSHOT_PRICES, ...rawPrices }));
     const fusionRoutes = cached.fusionRoutesVersion === CLI_VERSION && Array.isArray(cached.fusionRoutes)
       ? cached.fusionRoutes.filter(parseFusionRoute) : [];
@@ -691,7 +650,6 @@ export function catalogStatus(state, accountId) {
       families,
       images,
       freeIds,
-      recommendedIds,
       prices,
       fusionRoutes,
       source: cached.source ?? 'remote',
@@ -702,7 +660,6 @@ export function catalogStatus(state, accountId) {
       families: [],
       images: SNAPSHOT_IMAGES,
       freeIds: [],
-      recommendedIds: [],
       prices: new Map(),
       fusionRoutes: [],
       source: 'invalid-cache',
@@ -714,7 +671,7 @@ export function catalogStatus(state, accountId) {
 export function getModelRows(state, accountId) {
   const status = catalogStatus(state, accountId);
   if (status.broken) return [];
-  const entries = listed(status.families, status.images, new Set(status.freeIds), status.prices, status.recommendedIds);
+  const entries = listed(status.families, status.images, new Set(status.freeIds), status.prices);
   const bucket = accountId && state?.modelSettings?.[accountId] && typeof state.modelSettings[accountId] === 'object'
     ? state.modelSettings[accountId]
     : {};
@@ -763,17 +720,19 @@ function fusionIndexOf(state, accountId, status = catalogStatus(state, accountId
   if (!accountId || status.broken) return fusionRouteIndex([], []);
   const owner = state?.accounts?.find((a) => a.id === accountId);
   const server = (process.env.WINDSURF_API_SERVER_URL?.trim() || owner?.server || state?.settings?.serverUrl || DEFAULT_SERVER).replace(/\/+$/, '');
+  const latestOnly = state?.settings?.hideLegacyModels !== false;
+  const families = latestOnly ? status.families.filter((f) => isCurrentModelFamily(f.uid)) : status.families;
+  const ids = new Set(families.flatMap((f) => f.models.map((m) => m?.id)));
+  const available = (uid) => {
+    const { lead, sidekick } = parseFusionRoute(uid);
+    const untiered = ({ uid, tier }) => tier ? uid.slice(0, -(tier.length + 1)) : uid;
+    return ids.has(untiered(lead)) && ids.has(untiered(sidekick));
+  };
   if (status.fusionRoutes.length && state.catalogs?.[accountId]?.fusionServer === server) {
-    return fusionRouteIndex(status.fusionRoutes, status.families);
+    return fusionRouteIndex(latestOnly ? status.fusionRoutes.filter(available) : status.fusionRoutes, families);
   }
   if (server !== DEFAULT_SERVER) return fusionRouteIndex([], []);
-  const ids = new Set(status.families.flatMap((f) => f.models.map((m) => m?.id)));
-  const untiered = ({ uid, tier }) => tier ? uid.slice(0, -(tier.length + 1)) : uid;
-  const routes = SNAPSHOT_FUSION_ROUTES.filter((uid) => {
-    const { lead, sidekick } = parseFusionRoute(uid);
-    return ids.has(untiered(lead)) && ids.has(untiered(sidekick));
-  });
-  return fusionRouteIndex(routes, status.families);
+  return fusionRouteIndex(SNAPSHOT_FUSION_ROUTES.filter(available), families);
 }
 
 export function fusionCatalogOf(state, accountId) {

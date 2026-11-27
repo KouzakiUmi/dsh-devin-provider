@@ -2314,22 +2314,6 @@
     "swe-2-1-xhigh",
     "swe-2-1-max"
   ],
-  "recommendedIds": [
-    "swe-2-1",
-    "swe-2",
-    "swe-2-flash",
-    "claude-fable-5-2",
-    "claude-opus-5-5",
-    "gpt-6-2-astra",
-    "gpt-6-astra",
-    "gpt-6-sol",
-    "gpt-6-luna",
-    "gemini-4-carbon",
-    "kimi-k3-1-pro",
-    "glm-5-3",
-    "claude-sonnet-5-5",
-    "gemini-3-8-flash"
-  ],
   "prices": {
     "claude-fable-5-2-medium": {
       "input": 8,

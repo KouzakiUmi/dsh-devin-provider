@@ -280,6 +280,7 @@ test('Model catalog defaults to filtering legacy models, sorts enabled models fi
 
   const calls = [];
   let hideLegacy = true;
+  let onlyOld = false;
   const makeModel = (id, name, { enabled = true, legacy = false } = {}) => ({
     id,
     name,
@@ -301,11 +302,11 @@ test('Model catalog defaults to filtering legacy models, sorts enabled models fi
     fastSessionsCount: 0,
     catalogs: [{
       accountId: 'a1',
-      count: 4,
+      count: onlyOld ? 1 : 4,
       source: 'remote',
       // 故意把已停用模型放在前面，验证前端渲染仍保证已启用置顶
-      models: [
-        makeModel('swe-2', 'SWE-2', { enabled: false, legacy: false }),
+      models: onlyOld ? [makeModel('glm-5-3', 'GLM-5.3', { legacy: true })] : [
+        makeModel('gpt-6-2-sol', 'GPT-6.2 Sol', { enabled: false, legacy: false }),
         makeModel('swe-2-1', 'SWE-2.1', { enabled: true, legacy: false }),
         makeModel('claude-opus-4.6', 'Claude Opus 4.6', { enabled: true, legacy: true }),
         makeModel('claude-opus-5-5', 'Claude Opus 5.5', { enabled: true, legacy: false })
@@ -342,22 +343,33 @@ test('Model catalog defaults to filtering legacy models, sorts enabled models fi
     const injected = slotEntry.meta.inject();
     let tree = await mini.flush(() => mini.React.createElement(slotEntry.comp, injected));
 
-    // 默认开启过滤老旧模型开关
-    const filterSwitch = findAll(tree, (n) => n.type === 'input' && n.props?.['aria-label'] === '过滤老旧模型')[0];
-    assert.ok(filterSwitch, '应渲染「过滤老旧模型」开关');
+    // 默认开启最新代筛选。
+    const filterSwitch = findAll(tree, (n) => n.type === 'input' && n.props?.['aria-label'] === '仅显示最新代')[0];
+    assert.ok(filterSwitch, '应渲染「仅显示最新代」开关');
     assert.equal(filterSwitch.props.checked, true);
 
     const renderedIds = (t) => findAll(t, (n) => n.props?.className === 'ddp-model-id').map(textOf);
-    // 开启过滤时只展示 3 个主力模型，且已启用的 swe-2-1 / claude-opus-5-5 排在已停用的 swe-2 前面
-    assert.deepEqual(renderedIds(tree), ['swe-2-1', 'claude-opus-5-5', 'swe-2']);
+    // 最新代已启用模型排在停用的 GPT-6.2 Sol 前。
+    assert.deepEqual(renderedIds(tree), ['swe-2-1', 'claude-opus-5-5', 'gpt-6-2-sol']);
     assert.equal(textOf(tree).includes('Claude Opus 4.6'), false);
 
-    // 关闭过滤开关后触发 setHideLegacyModels(false)，显示老旧模型并带「老旧」标签，且已启用依然排在前面
+    // 关闭筛选后恢复完整目录，且已启用模型依然排在前面。
     filterSwitch.props.onChange({ target: { checked: false } });
     tree = await mini.flush(() => mini.React.createElement(slotEntry.comp, injected));
     assert.ok(calls.some((c) => c.op === 'setHideLegacyModels' && c.enabled === false));
-    assert.deepEqual(renderedIds(tree), ['swe-2-1', 'claude-opus-4.6', 'claude-opus-5-5', 'swe-2']);
-    assert.ok(textOf(tree).includes('老旧'));
+    assert.deepEqual(renderedIds(tree), ['swe-2-1', 'claude-opus-4.6', 'claude-opus-5-5', 'gpt-6-2-sol']);
+    assert.ok(textOf(tree).includes('非当前代'));
+
+    onlyOld = true;
+    findAll(tree, (n) => n.type === 'input' && n.props?.['aria-label'] === '仅显示最新代')[0].props.onChange({ target: { checked: true } });
+    tree = await mini.flush(() => mini.React.createElement(slotEntry.comp, injected));
+    assert.deepEqual(renderedIds(tree), []);
+    assert.ok(textOf(tree).includes('当前账号目录暂无已核实的最新代模型'));
+    const showAll = findAll(tree, (n) => n.type === 'button' && textOf(n) === '显示全部模型')[0];
+    assert.ok(showAll);
+    showAll.props.onClick();
+    tree = await mini.flush(() => mini.React.createElement(slotEntry.comp, injected));
+    assert.deepEqual(renderedIds(tree), ['glm-5-3']);
   } finally {
     mini.unmountAll();
   }

@@ -6,7 +6,6 @@ import {
   SNAPSHOT_FREE,
   SNAPSHOT_IMAGES,
   SNAPSHOT_PRICES,
-  SNAPSHOT_RECOMMENDED,
   effectiveModel,
   fastModelMap,
   getModelRows,
@@ -19,7 +18,6 @@ import {
   parseFree,
   parseModelConfigs,
   parsePrices,
-  parseRecommended,
   profileFor,
   variantFor
 } from '../src/catalog.mjs';
@@ -73,7 +71,6 @@ test('variantFor resolves family id, DSH off->none, nearest effort, and fast tie
   assert.equal(fastMap['kimi-k3'], undefined);
   assert.equal(SNAPSHOT_FREE.includes('swe-2-1-medium'), true);
   assert.equal(SNAPSHOT_FREE.includes('swe-2-high'), true);
-  assert.equal(SNAPSHOT_RECOMMENDED.includes('swe-2-1'), true);
   assert.equal(SNAPSHOT_PRICES['swe-2-1-medium-lightning']?.output, 25);
   assert.equal(SNAPSHOT_PRICES['swe-2-medium-lightning']?.output, 5);
 });
@@ -165,7 +162,6 @@ test('protobuf GetCliModelConfigs parsers read images, free tier, prices, and fa
   const buf = new PB().bytes(1, cfg1).bytes(1, cfg2).done();
   assert.deepEqual(parseModelConfigs(buf), { 'swe-2-high': true, 'custom-high': false });
   assert.deepEqual([...parseFree(buf)], ['swe-2-high']);
-  assert.deepEqual([...parseRecommended(buf)], ['swe-2']);
   const prices = parsePrices(buf);
   assert.equal(prices.get('custom-high')?.input, 3.5);
   const fams = parseConfigFamilies(buf);
@@ -226,6 +222,7 @@ test('per-model defaults, overrides, and profileFor filtering', () => {
   assert.equal(sol.effective.toolsEnabled, false);
   assert.equal(sol.effective.defaultReasoning, 'off');
 
+  state.settings.hideLegacyModels = false; // verify settings on an older model in the full catalog
   const profile = profileFor(state);
   assert.ok(profile);
   assert.equal(profile.provider, 'devin');
@@ -260,17 +257,18 @@ test('getModelRows sorts enabled models first and marks legacy models; profileFo
   assert.equal(rows.slice(firstDisabledIdx).every((r) => !r.enabled), true);
   assert.deepEqual(rows.slice(firstDisabledIdx).map((r) => r.id), ['swe-2-1', 'claude-opus-5-5']);
 
-  // 推荐模型 legacy === false，老旧模型 legacy === true
+  // 无论推荐标记如何，只保留各厂商当前代和同代分支。
   assert.equal(rows.find((r) => r.id === 'swe-2-1')?.legacy, false);
-  assert.equal(rows.find((r) => r.id === 'swe-2')?.legacy, false);
+  assert.equal(rows.find((r) => r.id === 'swe-2')?.legacy, true);
   assert.equal(rows.find((r) => r.id === 'claude-opus-4.6')?.legacy, true);
   assert.equal(rows.find((r) => r.id === 'gpt-5.4')?.legacy, true);
   assert.equal(rows.find((r) => r.id === 'swe-1.7')?.legacy, true);
 
-  // 默认 hideLegacyModels = true：profileFor 过滤老旧模型，保留当前推荐模型 + fusion
+  // 默认只注册当前代，保留所有已核实的并行分支。
   const filteredProfile = profileFor(state);
-  assert.equal(filteredProfile.models.some((m) => m.id === 'swe-2'), true);
-  assert.equal(filteredProfile.models.some((m) => m.id === 'fusion'), true);
+  const filteredIds = filteredProfile.models.map((m) => m.id);
+  for (const id of ['gpt-6-2-astra', 'gpt-6-2-sol', 'gemini-4-neon', 'gemini-4-hydrogen', 'claude-haiku-5-5', 'grok-4-7']) assert.ok(filteredIds.includes(id), id);
+  for (const id of ['swe-2', 'gpt-6-sol', 'gpt-6-1-terra', 'claude-fable-5-1', 'glm-5-3', 'glm-5-3-flash', 'gemini-3-8-flash']) assert.ok(!filteredIds.includes(id), id);
   assert.equal(filteredProfile.models.some((m) => m.id === 'swe-2-1'), false); // 已停用
   assert.equal(filteredProfile.models.some((m) => m.id === 'claude-opus-4.6'), false);
   assert.equal(filteredProfile.models.some((m) => m.id === 'gpt-5.4'), false);
@@ -282,15 +280,22 @@ test('getModelRows sorts enabled models first and marks legacy models; profileFo
   assert.equal(fullProfile.models.some((m) => m.id === 'gpt-5.4'), true);
   assert.equal(fullProfile.models.some((m) => m.id === 'swe-2-1'), false);
 
-  // 自定义目录无任何推荐命中时不误清空列表
-  state.settings.hideLegacyModels = true;
-  state.catalogs.a1 = {
-    source: 'remote',
-    families: [{ uid: 'private-model', label: 'Private', aliases: [], models: [{ id: 'private-model', name: 'Private', context: 128000, output: 16000 }] }],
-    images: {},
-    freeIds: [],
-    prices: {}
-  };
-  const customProfile = profileFor(state);
-  assert.equal(customProfile.models.some((m) => m.id === 'private-model'), true);
+});
+
+test('最新代晚于 Devin 目录时不拿旧款补位，旧缓存的推荐标记不影响结果', () => {
+  const state = initialState();
+  state.activeAccountId = 'a1';
+  state.accounts = [{ id: 'a1' }];
+  const family = (uid) => ({ uid, label: uid, models: [{ id: uid, name: uid }] });
+  for (const source of ['remote', 'cli']) {
+    state.settings.hideLegacyModels = true;
+    state.catalogs.a1 = {
+      source, families: ['glm-5-3', 'glm-5-3-flash', 'private-model'].map(family), recommendedIds: ['glm-5-3']
+    };
+    assert.deepEqual(profileFor(state).models, []);
+    state.catalogs.a1.families.push(family('glm-5.4'));
+    assert.deepEqual(profileFor(state).models.map((m) => m.id), ['glm-5.4']);
+    state.settings.hideLegacyModels = false;
+    assert.deepEqual(profileFor(state).models.map((m) => m.id), ['glm-5-3', 'glm-5-3-flash', 'private-model', 'glm-5.4']);
+  }
 });
